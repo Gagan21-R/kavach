@@ -36,7 +36,7 @@ async def database_error_handler(_: Request, exc: SQLAlchemyError) -> JSONRespon
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Consent Court API", version="2.0.0-m1")
+    app = FastAPI(title="Kavach API", version="2.0.0-m1")
     app.add_exception_handler(APIError, api_error_handler)
     app.add_exception_handler(SQLAlchemyError, database_error_handler)
     app.add_exception_handler(Exception, unexpected_error_handler)

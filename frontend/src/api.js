@@ -1,4 +1,4 @@
-// Thin client for the Consent Court API. Session auth is an HttpOnly cookie; writes also send the CSRF token.
+// Thin client for the Kavach API. Session auth is an HttpOnly cookie; writes also send the CSRF token.
 // Agent calls send X-Agent-Key (and X-Consent-Token at the gateway) exactly as a real agent would.
 
 let csrf = null;

@@ -93,7 +93,7 @@ def test_chatbot_is_read_only_and_tenant_scoped(granted, make_actor):
     other = make_actor()
     theirs = other.post if False else other.client.post("/chat/explain", json={"message": "which tokens are active?"}).json()
     assert "maps.example.com" not in theirs["answer"]
-    arch = user.client.post("/chat/explain", json={"message": "How does Consent Court work?"}).json()
+    arch = user.client.post("/chat/explain", json={"message": "How does Kavach work?"}).json()
     assert arch["intent"] == "architecture"
 
 

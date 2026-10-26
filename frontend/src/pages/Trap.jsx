@@ -93,7 +93,7 @@ export default function Trap() {
 
   return (
     <>
-      <PageHeader title="The Trap" subtitle="A signup page hides an instruction for AI agents in white-on-white text and an HTML comment. People can't see it; a naive browser agent reads it and obeys. Consent Court's Sentinel catches it first.">
+      <PageHeader title="The Trap" subtitle="A signup page hides an instruction for AI agents in white-on-white text and an HTML comment. People can't see it; a naive browser agent reads it and obeys. Kavach's Sentinel catches it first.">
         <Button onClick={() => { setNaive(null); setGuarded(null); setReveal(false); }}>Reset</Button>
       </PageHeader>
       <ErrorNote error={error} />
@@ -108,7 +108,7 @@ export default function Trap() {
         </Card>
         <div className="space-y-6">
           <AgentRun title="Naive AI agent" icon={Bot} tone="text-red-500" run={naive} busy={busy === "n"} onRun={() => run(false)} buttonLabel="Let it sign up" />
-          <AgentRun title="Agent with Consent Court" icon={ShieldCheck} tone="text-emerald-600" run={guarded} busy={busy === "g"} onRun={() => run(true)} buttonLabel="Sign up, guarded" />
+          <AgentRun title="Agent with Kavach" icon={ShieldCheck} tone="text-emerald-600" run={guarded} busy={busy === "g"} onRun={() => run(true)} buttonLabel="Sign up, guarded" />
           {guarded?.headline && (
             <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-4 text-[13px] text-slate-700 shadow-sm">
               <ShieldAlert className="mt-0.5 h-4 w-4 text-indigo-600" />

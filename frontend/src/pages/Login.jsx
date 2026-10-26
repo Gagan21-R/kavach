@@ -1,4 +1,4 @@
-import { Eye, Gavel, Scale, ShieldAlert } from "lucide-react";
+import { Eye, Gavel, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../state";
 import { Button, ErrorNote, Field, inputCls } from "../ui";
@@ -29,12 +29,12 @@ export default function Login() {
     <div className="grid min-h-full lg:grid-cols-2">
       <div className="hidden flex-col justify-between bg-slate-900 p-12 text-slate-200 lg:flex">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600"><Scale className="h-5 w-5 text-white" /></div>
-          <span className="font-serif text-[20px] font-semibold text-white">Consent Court</span>
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600"><ShieldCheck className="h-5 w-5 text-white" /></div>
+          <span className="font-serif text-[20px] font-semibold text-white">Kavach</span>
         </div>
         <div>
           <h1 className="font-serif text-[40px] font-semibold leading-tight text-white">Consent was designed for humans who read.</h1>
-          <p className="mt-4 max-w-md text-[15px] text-slate-400">Now neither humans nor AI agents read, and policies change after you agree. Consent Court reads, argues over, guards and keeps watching every “I agree”.</p>
+          <p className="mt-4 max-w-md text-[15px] text-slate-400">Now neither humans nor AI agents read, and policies change after you agree. Kavach reads, argues over, guards and keeps watching every “I agree”.</p>
           <div className="mt-10 grid max-w-lg gap-4">
             {[[Gavel, "The Trial", "Six agents argue each clause, cite every sentence, and an independent auditor checks the verdict."],
               [ShieldAlert, "The Trap", "Hidden instructions aimed at AI agents are caught before an agent clicks Accept."],

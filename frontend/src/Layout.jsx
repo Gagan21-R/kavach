@@ -1,6 +1,6 @@
 import {
   Bot, ClipboardList, Eye, FlaskConical, Gavel, GitBranch, KeyRound, LayoutDashboard, LogOut, MessageCircle,
-  OctagonX, ScrollText, ShieldAlert, Scale,
+  OctagonX, ScrollText, ShieldAlert, ShieldCheck,
 } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
@@ -45,7 +45,7 @@ function StepUpModal() {
   return (
     <Modal title="Confirm it's you" onClose={() => finishStepUp(false)}>
       <form onSubmit={submit} className="space-y-4">
-        <p className="text-[13px] text-slate-600">This change loosens your protections, so Consent Court needs you to re-enter the password for <b>{user?.email}</b>. It stays confirmed for 5 minutes.</p>
+        <p className="text-[13px] text-slate-600">This change loosens your protections, so Kavach needs you to re-enter the password for <b>{user?.email}</b>. It stays confirmed for 5 minutes.</p>
         <Field label="Password"><input autoFocus type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
         <ErrorNote error={error} />
         <div className="flex justify-end gap-2">
@@ -64,9 +64,9 @@ export default function Layout() {
     <div className="flex h-full">
       <aside className="flex w-60 shrink-0 flex-col bg-slate-900 text-slate-300">
         <div className="flex items-center gap-2.5 px-5 py-5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600"><Scale className="h-4.5 w-4.5 text-white" /></div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600"><ShieldCheck className="h-4.5 w-4.5 text-white" /></div>
           <div>
-            <div className="font-serif text-[17px] font-semibold text-white">Consent Court</div>
+            <div className="font-serif text-[17px] font-semibold text-white">Kavach</div>
             <div className="text-[11px] text-slate-400">reads · argues · guards · watches</div>
           </div>
         </div>

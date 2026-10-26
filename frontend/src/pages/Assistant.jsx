@@ -4,7 +4,7 @@ import { post } from "../api";
 import { Badge, Button, Card, PageHeader, cx, inputCls } from "../ui";
 
 const SUGGESTIONS = [
-  "How does Consent Court work?",
+  "How does Kavach work?",
   "Why was my agent blocked?",
   "What does the Sentinel do?",
   "Which tokens are active?",
@@ -16,7 +16,7 @@ const SUGGESTIONS = [
 ];
 
 export default function Assistant() {
-  const [msgs, setMsgs] = useState([{ from: "bot", text: "I explain how Consent Court works and what happened on your account. I'm read-only: I can't approve, revoke, change rules or send anything.", intent: "intro" }]);
+  const [msgs, setMsgs] = useState([{ from: "bot", text: "I explain how Kavach works and what happened on your account. I'm read-only: I can't approve, revoke, change rules or send anything.", intent: "intro" }]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const end = useRef(null);

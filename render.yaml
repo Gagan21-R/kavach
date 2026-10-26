@@ -1,7 +1,7 @@
 # Render blueprint (not yet deployed or verified on Render).
 services:
   - type: web
-    name: consent-court
+    name: kavach
     runtime: python
     plan: free
     buildCommand: pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build
@@ -18,11 +18,11 @@ services:
         value: ""
       - key: CC_DATABASE_URL
         fromDatabase:
-          name: consent-court-db
+          name: kavach-db
           property: connectionString
 
   - type: cron
-    name: consent-court-watchman
+    name: kavach-watchman
     runtime: python
     schedule: "0 */6 * * *"
     buildCommand: pip install -r backend/requirements.txt
@@ -32,9 +32,9 @@ services:
         value: 3.13.7
       - key: CC_DATABASE_URL
         fromDatabase:
-          name: consent-court-db
+          name: kavach-db
           property: connectionString
 
 databases:
-  - name: consent-court-db
+  - name: kavach-db
     plan: free

@@ -34,7 +34,7 @@ AGENTS = {
 }
 
 ARCHITECTURE = (
-    "Consent Court puts every policy on trial. Sentinel screens the input; the Prosecutor and Defense argue each clause; the "
+    "Kavach puts every policy on trial. Sentinel screens the input; the Prosecutor and Defense argue each clause; the "
     "Evidence Clerk verifies citations; the Judge rules; an independent auditor checks the result; Watchman keeps watching for "
     "changes. Separately, the Guardian enforces your own rules: an agent needs a short-lived token scoped to one action, "
     "destination, purpose and data set, and the gateway re-checks everything at the moment of use."
@@ -67,7 +67,7 @@ def explain(db: Session, user: User, message: str) -> dict:
         if name in m:
             return answer(text, f"agent:{name}")
 
-    if re.search(r"how (does|do) .*work|what is (consent court|this)|architecture|six agents|the court\b", m):
+    if re.search(r"how (does|do) .*work|what is (kavach|consent court|this)|architecture|six agents|the court\b", m):
         return answer(ARCHITECTURE, "architecture")
 
     if re.search(r"\bwhy\b.*\b(block|blocked|denied|rejected|refused|stopped)\b|\b(blocked|denied|rejected)\b", m):
@@ -152,5 +152,5 @@ def explain(db: Session, user: User, message: str) -> dict:
                  + (f" to {', '.join(r.recipients)}" if r.recipients else "") for r in rules]
         return answer("Your active rules (DENY always wins):\n" + "\n".join(lines), "rules", [_ref("rule", r.id, r.effect) for r in rules])
 
-    return answer("I can explain how Consent Court works, any of the agents, why something was blocked, your tokens, policy "
+    return answer("I can explain how Kavach works, any of the agents, why something was blocked, your tokens, policy "
                   "changes, risk scores, confidence, data flows, Emergency Stop and Red Team results. What would you like to know?", "help")

@@ -55,7 +55,7 @@ def _check_url(url: str) -> None:
 
 def fetch_policy(url: str, client: httpx.Client | None = None) -> FetchResult:
     own = client is None
-    client = client or httpx.Client(timeout=TIMEOUT, follow_redirects=False, headers={"User-Agent": "ConsentCourt-Watchman/1.0"})
+    client = client or httpx.Client(timeout=TIMEOUT, follow_redirects=False, headers={"User-Agent": "Kavach-Watchman/1.0"})
     try:
         current = url
         for _ in range(MAX_REDIRECTS + 1):

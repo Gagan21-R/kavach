@@ -66,7 +66,7 @@ export default function Overview() {
 
   return (
     <>
-      <PageHeader title="Overview" subtitle="Everything Consent Court is guarding for you: policies on trial, agent authority, blocked flows and system health.">
+      <PageHeader title="Overview" subtitle="Everything Kavach is guarding for you: policies on trial, agent authority, blocked flows and system health.">
         {c.policies === 0 && <Button variant="primary" icon={Sparkles} loading={seeding} onClick={seed}>Load demo data</Button>}
       </PageHeader>
       <ErrorNote error={seedError} />

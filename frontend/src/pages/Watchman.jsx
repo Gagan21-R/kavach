@@ -40,7 +40,7 @@ function DraftModal({ policyId, event, type, onClose }) {
             <Button icon={Copy} onClick={async () => { await navigator.clipboard.writeText(`Subject: ${draft.subject}\n\n${body}`); setCopied(true); }}>{copied ? "Copied" : "Copy to clipboard"}</Button>
             <Button variant="primary" onClick={onClose}>Done</Button>
           </div>
-          <p className="text-right text-[11.5px] text-slate-400">Consent Court never sends this for you.</p>
+          <p className="text-right text-[11.5px] text-slate-400">Kavach never sends this for you.</p>
         </div>
       )}
     </Modal>

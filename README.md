@@ -1,4 +1,6 @@
-# Consent Court 2.0
+# Kavach
+
+*Kavach* (Sanskrit: armour) was previously called Kavach.
 
 A multi-agent system that reads privacy policies, argues over them, enforces each user's own consent rules, and keeps watching the policies after the user agrees. It works for people and for the AI agents acting on their behalf.
 

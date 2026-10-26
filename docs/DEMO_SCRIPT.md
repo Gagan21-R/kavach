@@ -1,10 +1,10 @@
-# Consent Court — demo script
+# Kavach — demo script
 
 Run in the browser against the real backend on 2026-10-26: sections 1, 2, 3.1–3.4, 4.1–4.3, 5, 6 and 7. Steps 3.5, 4.4 and 4.5 were not clicked through in the browser; the automated test suite covers the same behaviour.
 
 Local demo account (test credentials for the local SQLite demo database only; never use in production):
 
-- Email: `demo@consentcourt.example`
+- Email: `demo@consentcourt.example` (created before the product was renamed; still valid)
 - Password: `court-demo-2026!`
 
 ## Setup (once)

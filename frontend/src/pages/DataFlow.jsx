@@ -161,7 +161,7 @@ export default function DataFlow() {
             </div>
           )}
         </Card>
-        <Card title="Monitoring boundary" subtitle="What Consent Court can and cannot see.">
+        <Card title="Monitoring boundary" subtitle="What Kavach can and cannot see.">
           {coverage.data && (
             <div className="space-y-3 text-[12.5px]">
               <div><Badge tone="green">Instrumented</Badge><ul className="mt-1.5 space-y-1 text-slate-600">{coverage.data.instrumented.map((x) => <li key={x}>• {x}</li>)}</ul></div>

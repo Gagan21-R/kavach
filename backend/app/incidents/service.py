@@ -13,7 +13,7 @@ from app.errors import APIError, not_found
 from app.models import AgentClient, AuthSession, ConsentToken, Incident, User
 
 EXTERNAL_LIMITS = (
-    "Data already delivered to other companies before the stop cannot be recalled by Consent Court. "
+    "Data already delivered to other companies before the stop cannot be recalled by Kavach. "
     "Use the data access and deletion request drafts to ask those companies directly."
 )
 

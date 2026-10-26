@@ -14,14 +14,14 @@ from app.models import DataAsset, FlowEvent
 COVERAGE = {
     "instrumented": [
         "Protected actions an agent sends through POST /gateway/execute (transfer_data, accept_terms, submit_form, create_account, send_message)",
-        "Lineage of data assets registered in Consent Court, including derived assets",
+        "Lineage of data assets registered in Kavach, including derived assets",
         "Guardian decisions and token use, accepted or rejected",
     ],
     "not_instrumented": [
         "Network calls an agent makes directly, without the gateway",
         "What a recipient does with data after delivery (third-party processing, onward sharing)",
-        "Browser extensions, OS-level telemetry and apps outside Consent Court",
-        "Encrypted channels Consent Court is not a party to",
+        "Browser extensions, OS-level telemetry and apps outside Kavach",
+        "Encrypted channels Kavach is not a party to",
     ],
     "note": "In this build every gateway adapter is simulated: no data actually leaves the machine.",
 }

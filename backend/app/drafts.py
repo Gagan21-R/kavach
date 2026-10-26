@@ -1,6 +1,6 @@
 """Editable request drafts (data access, deletion, consent withdrawal, objection).
 
-Drafts are text for the user to review, edit and send themselves. Consent Court has no code path that sends
+Drafts are text for the user to review, edit and send themselves. Kavach has no code path that sends
 email. The wording asks rather than asserts legal entitlement, because which rights apply depends on law and
 circumstances we have not established.
 """
@@ -45,7 +45,7 @@ def draft(policy: PolicySource, snapshot: PolicySnapshot, request_type: str, *, 
         "to_hint": f"privacy contact for {policy.domain} (check the policy's contact section)",
         "body": "\n".join(lines),
         "sent": False,
-        "disclaimer": "This is a draft for you to edit and send yourself. Consent Court never sends it. Whether the "
+        "disclaimer": "This is a draft for you to edit and send yourself. Kavach never sends it. Whether the "
                       "company must comply depends on the law where you live and other circumstances; this is not legal advice.",
         "based_on_version": snapshot.version,
     }

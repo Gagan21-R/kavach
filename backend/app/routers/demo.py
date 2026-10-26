@@ -1,7 +1,7 @@
 """Demo support: fixtures, the 'Trap' simulation, one-click seeding and the dashboard summary.
 
 The Trap simulation never clicks anything real. It shows what a naive agent would do with a page (obey every
-instruction it reads, including hidden ones) next to what a Consent Court-guarded agent does.
+instruction it reads, including hidden ones) next to what a Kavach-guarded agent does.
 """
 from datetime import timedelta
 

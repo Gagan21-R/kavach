@@ -1,4 +1,4 @@
-# Consent Court 2.0 — Architecture
+# Kavach — Architecture
 
 Milestone 1 (enforcement core) is described first. The court, Watchman, data flow, Emergency Stop, Red Team Lab, assistant and dashboard added afterwards are covered in [Beyond Milestone 1](#beyond-milestone-1) at the end.
 
