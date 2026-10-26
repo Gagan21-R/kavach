@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import audit_log, clock
 from app.auth.crypto import hash_password, random_secret, sha256, verify_password
-from app.auth.deps import UserContext, current_user
+from app.auth.deps import UserContext, current_user, has_recent_step_up
 from app.config import get_settings
 from app.db import get_db
 from app.errors import APIError
@@ -93,6 +93,14 @@ def step_up(body: StepUpIn, ctx: UserContext = Depends(current_user), db: Sessio
 @router.get("/me", response_model=UserOut)
 def me(ctx: UserContext = Depends(current_user)):
     return _user_out(ctx.user)
+
+
+@router.get("/session")
+def session_info(ctx: UserContext = Depends(current_user)):
+    """Lets the single-page app recover its CSRF token after a reload. Readable only by same-origin scripts:
+    the cookie is SameSite=Strict and CORS allows only the configured frontend origin."""
+    return {"user": _user_out(ctx.user), "csrf_token": ctx.session.csrf_token, "expires_at": ctx.session.expires_at,
+            "step_up_valid": has_recent_step_up(ctx.session), "frozen": ctx.user.frozen}
 
 
 @router.post("/sessions/revoke-all")

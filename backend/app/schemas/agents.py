@@ -182,7 +182,10 @@ class RiskScore(StrictModel):
 class JudgeOutput(StrictModel):
     meta: AgentMeta
     recommendation: Decision  # advisory only; the Guardian never treats it as authorization
+    headline: str = Field(default="", max_length=300)
     category_map: list[CategoryAssessment] = Field(max_length=8)
+    questions_to_ask: list[str] = Field(default_factory=list, max_length=20)
+    safer_choices: list[str] = Field(default_factory=list, max_length=20)
     agreements: list[str] = Field(default_factory=list, max_length=100)
     disagreements: list[Disagreement] = Field(default_factory=list, max_length=100)
     missing_information: list[str] = Field(default_factory=list, max_length=50)

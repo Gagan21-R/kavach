@@ -41,6 +41,8 @@ def simulated_egress(act: AuthorizedAction, payload: dict | None, gateway_pass: 
     if gateway_pass is not _GATEWAY_PASS:
         raise AdapterNotAuthorized("adapters may only be invoked by the gateway")
     CALL_LOG.append({"token_id": act.token_id, "action": act.action, "destination": act.destination})
+    if len(CALL_LOG) > 5000:  # bounded in long-running servers
+        del CALL_LOG[:1000]
     return {
         "simulated": True,
         "delivered_to": act.destination,

@@ -123,7 +123,10 @@ def test_destination_outside_referenced_policy_is_not_approvable(make_actor):
 
 def test_policy_awaiting_reassessment_blocks_new_tokens_until_user_reviews(make_actor):
     user, agent, _, policy_id = setup(make_actor, ("ALLOW", ["location"], {"purposes": ["navigation"]}))
-    user.client.post(f"/policies/{policy_id}/snapshots", json={"text": "We now sell location data."})
+    new_version = ("MapsCo collects your location to provide navigation. We do not sell location data. "
+                   "We keep trip history for 30 days and then delete it.")
+    r = user.client.post(f"/policies/{policy_id}/snapshots", json={"text": new_version})
+    assert r.json()["watch_event"]["classification"] == "POTENTIALLY_MATERIAL"
     assert agent.post("/guardian/authorize", json=action(policy_id)).status_code == 409
     user.step_up()
     assert user.client.post(f"/policies/{policy_id}/reassess").json()["requires_reassessment"] is False

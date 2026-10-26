@@ -5,14 +5,14 @@ from sqlalchemy import engine_from_config, pool
 
 import app.models  # noqa: F401  (registers every table on Base.metadata)
 from app.config import get_settings
-from app.db import Base, UTCDateTime
+from app.db import Base, UTCDateTime, normalize_url
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # The database URL always comes from CC_DATABASE_URL, never from alembic.ini, so no credentials live in the repo.
-config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", normalize_url(get_settings().database_url).replace("%", "%%"))
 target_metadata = Base.metadata
 
 

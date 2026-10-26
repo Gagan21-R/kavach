@@ -163,7 +163,13 @@ class PolicyOut(BaseModel):
     locale: str | None
     current_snapshot_id: str | None
     current_hash: str | None
+    current_version: int
+    last_material_version: int
     requires_reassessment: bool
+    current_analysis_id: str | None
+    watch_status: str
+    watch_error: str | None
+    last_checked_at: datetime | None
     created_at: datetime
 
 
@@ -175,6 +181,7 @@ class SnapshotOut(BaseModel):
     content_hash: str
     retrieved_at: datetime
     length: int
+    classification: str | None
 
 
 # --- guardian -----------------------------------------------------------------
@@ -287,6 +294,8 @@ class ApprovalOut(BaseModel):
 
 class GatewayIn(ActionIn):
     record_count: int = Field(default=1, ge=1, le=1_000_000)
+    # Labelled data being sent. Categories inherited through its lineage must all be declared and covered.
+    asset_id: str | None = Field(default=None, max_length=32)
     # Forwarded to the adapter, never stored or logged; only its hash is recorded.
     payload: dict | None = None
 

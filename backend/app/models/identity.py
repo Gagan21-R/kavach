@@ -15,6 +15,9 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     # Bumped on every rule change; recorded on tokens and decisions for traceability.
     constitution_version: Mapped[int] = mapped_column(Integer, default=0)
+    # Emergency Stop: while true, no protected action can be authorized or executed for this user.
+    frozen: Mapped[bool] = mapped_column(Boolean, default=False)
+    active_incident_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
 
 

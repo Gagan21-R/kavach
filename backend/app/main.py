@@ -11,10 +11,17 @@ from app import context
 from app.config import get_settings
 from app.db import SessionLocal
 from app.errors import APIError, api_error_handler
-from app.routers import agents, audit, auth, gateway, guardian, policies, rules
+from app.routers import agents, audit, auth, demo, gateway, guardian, ops, policies, rules
 from app.vocab import Decision
 
 log = logging.getLogger("consent_court")
+
+
+async def unexpected_error_handler(_: Request, exc: Exception) -> JSONResponse:
+    # Anything unexpected is a refusal, never an accidental approval.
+    log.exception("unhandled error: %s", type(exc).__name__)
+    return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL_ERROR", "message": "something went wrong; no action was authorized",
+                                                            "decision": Decision.BLOCK, "executed": False}})
 
 
 async def database_error_handler(_: Request, exc: SQLAlchemyError) -> JSONResponse:
@@ -32,6 +39,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Consent Court API", version="2.0.0-m1")
     app.add_exception_handler(APIError, api_error_handler)
     app.add_exception_handler(SQLAlchemyError, database_error_handler)
+    app.add_exception_handler(Exception, unexpected_error_handler)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
@@ -57,7 +65,8 @@ def create_app() -> FastAPI:
         response.headers["Cache-Control"] = "no-store"
         return response
 
-    for r in (auth.router, agents.router, rules.router, policies.router, guardian.router, gateway.router, audit.router):
+    for r in (auth.router, agents.router, rules.router, policies.router, guardian.router, gateway.router, audit.router,
+              ops.router, demo.router):
         app.include_router(r)
 
     @app.get("/health", tags=["ops"])

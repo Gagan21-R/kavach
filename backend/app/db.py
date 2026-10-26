@@ -34,8 +34,17 @@ class Base(DeclarativeBase):
     pass
 
 
+def normalize_url(url: str) -> str:
+    """Render and Heroku hand out postgres:// URLs; SQLAlchemy needs the psycopg 3 driver named explicitly."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
 def make_engine(url: str) -> Engine:
-    kwargs = {}
+    url = normalize_url(url)
+    kwargs = {"pool_pre_ping": True} if url.startswith("postgresql") else {}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
     engine = create_engine(url, **kwargs)

@@ -68,6 +68,7 @@ class ConsentToken(Base):
     data_categories: Mapped[list] = mapped_column(JSON)
     policy_source_id: Mapped[str] = mapped_column(ForeignKey("policy_sources.id"))
     policy_hash: Mapped[str] = mapped_column(String(64))
+    policy_version: Mapped[int] = mapped_column(Integer, default=1)
     constitution_version: Mapped[int] = mapped_column(Integer)
     approval_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     issued_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)

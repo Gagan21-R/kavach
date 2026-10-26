@@ -33,5 +33,8 @@ def check(key: str, limit: int, window_seconds: float = 60.0) -> None:
 
 
 def auth_limit(request: Request) -> None:
+    # The Red Team Lab runs its own isolated, in-memory app instance and flags it; real traffic never sets this.
+    if getattr(request.app.state, "ratelimit_exempt", False):
+        return
     ip = request.client.host if request.client else "unknown"
     check(f"auth:{request.url.path}:{ip}", get_settings().rate_limit_auth_per_minute)

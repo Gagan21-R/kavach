@@ -1,11 +1,15 @@
 """Guardian: deterministic authorization for protected agent actions.
 
-Decision order (no model can change it):
-  1. A user DENY rule                                  -> BLOCK
-  2. Policy problems (no snapshot, awaiting reassessment,
-     destination outside the referenced policy)        -> REVIEW, not approvable
-  3. REQUIRE_APPROVAL rule or no covering rule         -> REVIEW, approvable by the user
-  4. Every category covered by ALLOW rules             -> ALLOW
+Decision order (no model can change it; model output only ever adds caution):
+  1. Emergency Stop active                              -> BLOCK
+  2. A user DENY rule                                   -> BLOCK
+  3. Sentinel found instructions aimed at AI agents     -> BLOCK
+  4. Policy problems (no snapshot, no analysis, awaiting
+     reassessment, destination outside the policy)      -> REVIEW, not approvable
+  5. Analysis not verified (auditor FAIL/ABSTAIN, failed
+     run) or the last Watchman check is UNKNOWN         -> REVIEW, approvable by the user
+  6. REQUIRE_APPROVAL rule or no covering rule          -> REVIEW, approvable by the user
+  7. Every category covered by ALLOW rules              -> ALLOW
 """
 from dataclasses import dataclass
 from datetime import timedelta
@@ -19,7 +23,7 @@ from app.engine import constitution
 from app.engine.hosts import host_within
 from app.errors import APIError, not_found
 from app.guardian import tokens
-from app.models import AgentClient, ApprovalRequest, ConsentRule, PolicySource, User
+from app.models import AgentClient, AnalysisRun, ApprovalRequest, ConsentRule, PolicySource, User
 from app.models._common import new_id
 from app.vocab import Decision
 
@@ -61,15 +65,28 @@ def active_rules(db: Session, user_id: str) -> list[ConsentRule]:
     )
 
 
-def _policy_problems(policy: PolicySource, destination: str) -> list[str]:
-    problems = []
+def _policy_checks(db: Session, policy: PolicySource, destination: str) -> tuple[list[str], list[str], list[str]]:
+    """Returns (blocking, hard_review, soft_review) reasons derived from the policy and its analysis."""
+    blocking, hard, soft = [], [], []
     if policy.current_hash is None:
-        problems.append("no policy snapshot is on record for this destination")
+        hard.append("no policy snapshot is on record for this destination")
     if policy.requires_reassessment:
-        problems.append("the destination's policy changed and is awaiting your reassessment")
+        hard.append("the destination's policy changed and is awaiting your reassessment")
     if not host_within(destination, policy.domain):
-        problems.append(f"{destination} is not covered by the referenced policy for {policy.domain}")
-    return problems
+        hard.append(f"{destination} is not covered by the referenced policy for {policy.domain}")
+    run = db.get(AnalysisRun, policy.current_analysis_id) if policy.current_analysis_id else None
+    if run is None:
+        hard.append("the policy has not been analysed yet")
+    else:
+        if run.sentinel_suspicious:
+            blocking.append("the policy page contains instructions aimed at AI agents (Sentinel); it cannot be trusted")
+        if run.status != "COMPLETED":
+            soft.append("the court analysis failed validation, so its findings are unverified")
+        elif run.audit_verdict != "PASS":
+            soft.append(f"the independent auditor did not verify the analysis ({run.audit_verdict})")
+    if policy.watch_status == "UNKNOWN":
+        soft.append("the last Watchman check could not retrieve the policy, so it may have changed")
+    return blocking, hard, soft
 
 
 def evaluate(
@@ -89,11 +106,17 @@ def evaluate(
         constitution.ActionRequest(action, destination, purpose, tuple(data_categories)),
         clock.utcnow(),
     )
-    problems = _policy_problems(policy, destination)
-    if result.decision == Decision.BLOCK:
+    blocking, hard, soft = _policy_checks(db, policy, destination)
+    if user.frozen:
+        decision, approvable, reasons = Decision.BLOCK, False, ["Emergency Stop is active: all protected actions are frozen"]
+    elif result.decision == Decision.BLOCK:
         decision, approvable, reasons = Decision.BLOCK, False, result.reasons
-    elif problems:
-        decision, approvable, reasons = Decision.REVIEW, False, problems + result.reasons
+    elif blocking:
+        decision, approvable, reasons = Decision.BLOCK, False, blocking
+    elif hard:
+        decision, approvable, reasons = Decision.REVIEW, False, hard + result.reasons
+    elif soft:
+        decision, approvable, reasons = Decision.REVIEW, True, soft + (result.reasons if result.decision != Decision.ALLOW else [])
     else:
         decision, approvable, reasons = result.decision, result.approvable, result.reasons
     return Evaluation(

@@ -51,6 +51,7 @@ def issue(
         data_categories=sorted(set(data_categories)),
         policy_source_id=policy.id,
         policy_hash=policy.current_hash,
+        policy_version=policy.current_version,
         constitution_version=constitution_version,
         approval_id=approval_id,
         issued_at=issued_at,
@@ -101,8 +102,9 @@ def check_static(
     extra = sorted(set(data_categories) - set(token.data_categories))
     if extra:
         raise TokenRejected("SCOPE_EXCEEDED", f"token does not cover data categories: {', '.join(extra)}", token)
-    if policy is None or policy.current_hash != token.policy_hash:
-        raise TokenRejected("STALE_POLICY", "the destination's policy has changed since this token was issued", token)
+    # Formatting-only and non-material wording changes keep tokens valid; a material change does not.
+    if policy is None or policy.last_material_version > token.policy_version:
+        raise TokenRejected("STALE_POLICY", "the destination's policy changed materially since this token was issued", token)
     if policy.requires_reassessment:
         raise TokenRejected("REASSESSMENT_REQUIRED", "the destination's policy is awaiting reassessment", token)
     if token.use_count >= token.max_uses:
