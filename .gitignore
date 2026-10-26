@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Local state and secrets
+.env
+*.env.local
+*.db
+*.sqlite
+*.sqlite3
+*.bak
+
+# Node (frontend, later milestones)
+node_modules/
+dist/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+.vscode/
+.idea/
