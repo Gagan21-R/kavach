@@ -71,7 +71,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest
 ```
 
-185 tests: engine, contracts, auth, tenant isolation, tokens, gateway bypass and fail-closed behaviour, court pipeline, auditor, Watchman, data flow, Emergency Stop, chatbot, drafts, Red Team reproducibility, migrations, cron, production app, policy acquisition and fallbacks, discovery, preferences, combined site reviews, automatic re-checks with ETag / Last-Modified, the extension API and automatic connection, the monitoring inbox, rule groups, the improved Emergency Stop and the scoring calibration. No test touches the network.
+186 tests: engine, contracts, auth, tenant isolation, tokens, gateway bypass and fail-closed behaviour, court pipeline, auditor, Watchman, data flow, Emergency Stop, chatbot, drafts, Red Team reproducibility, migrations, cron, production app, policy acquisition and fallbacks, discovery, preferences, combined site reviews, automatic re-checks with ETag / Last-Modified, the extension API and automatic connection, the monitoring inbox, rule groups, the improved Emergency Stop and the scoring calibration. No test touches the network.
 
 ## Deploy on Render
 

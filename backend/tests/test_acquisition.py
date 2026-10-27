@@ -89,6 +89,23 @@ def test_shared_cache_serves_many_users_with_one_request(Session, fake_fetch, fr
         assert db.get(FetchCache, "https://site.example/privacy").ok
 
 
+def test_two_reviews_fetching_the_same_page_at_once_both_succeed(Session, frozen):
+    # Opening a policy page starts the visit's lookup and the page's own review together; both miss the cache and
+    # store the same URL. The second must update the shared copy, not fail the whole review.
+    url = "https://site.example/terms"
+    first = acq.Acquired(True, text="Version one " * 50, method="DIRECT", source_url=url)
+    second = acq.Acquired(True, text="Version two " * 50, method="DIRECT", source_url=url)
+    with Session() as a, Session() as b:
+        assert a.get(FetchCache, url) is None and b.get(FetchCache, url) is None  # both start on a cache miss
+        acq.acquire_cached(a, url, fetcher=lambda u, ota: first)
+        a.commit()
+        acq._insert(b, url, second, frozen())  # b still believes the row is missing
+        b.commit()
+    with Session() as db:
+        row = db.get(FetchCache, url)
+        assert row.ok and row.text.startswith("Version two") and row.fetched_at == frozen()
+
+
 def test_discovery_finds_footer_links_and_rejects_bad_domains():
     html = ('<footer><a href="/about">About</a><a href="/legal/privacy-notice">Privacy Notice</a>'
             '<a href="https://help.example.com/terms">Terms of Service</a><a href="/cookies">Cookie settings</a></footer>')

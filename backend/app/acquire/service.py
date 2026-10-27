@@ -19,6 +19,7 @@ from urllib.parse import quote, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import Session
 
 from app import clock
@@ -235,10 +236,10 @@ def acquire_cached(db: Session, url: str, ota: tuple[str, str] | None = None, ma
         return Acquired(row.ok, row.text, row.method, row.source_url, row.error, [*row.attempts, {"method": "CACHE", "ok": row.ok, "detail": "shared copy"}])
     got = (fetcher or acquire)(url, ota)
     if row is None:
-        row = FetchCache(url=url)
-        db.add(row)
-    _store(row, got, now)
-    db.flush()
+        _insert(db, url, got, now)
+    else:
+        _store(row, got, now)
+        db.flush()
     return got
 
 
@@ -246,6 +247,21 @@ def _store(row: FetchCache, got: Acquired, now) -> None:
     row.ok, row.text, row.method, row.source_url, row.error, row.attempts, row.fetched_at = (
         got.ok, got.text, got.method, got.source_url, got.error, got.attempts, now)
     row.etag, row.last_modified = got.etag[:300], got.last_modified[:100]
+
+
+def _insert(db: Session, url: str, got: Acquired, now) -> None:
+    """Adds the shared copy, or updates it if another request stored the same page meanwhile. Opening a policy page
+    starts two reviews of the site at once (the visit's lookup and the page's own), which fetch the same URLs."""
+    values = {"ok": got.ok, "text": got.text, "method": got.method, "source_url": got.source_url, "error": got.error,
+              "attempts": got.attempts, "etag": got.etag[:300], "last_modified": got.last_modified[:100], "fetched_at": now}
+    dialect = db.get_bind().dialect.name
+    if dialect not in ("postgresql", "sqlite"):
+        _store(row := FetchCache(url=url), got, now)
+        db.add(row)
+        db.flush()
+        return
+    insert = postgresql.insert if dialect == "postgresql" else sqlite.insert
+    db.execute(insert(FetchCache).values(url=url, **values).on_conflict_do_update(index_elements=["url"], set_=values))
 
 
 NOT_MODIFIED = "The site said the page hasn't changed (ETag / Last-Modified)"
@@ -270,10 +286,10 @@ def recheck(db: Session, url: str) -> tuple[FetchResult, str]:
     got = acquire(url, ota_for(url), allow_wayback=False)  # an old archive capture must never pass for the current version
     if got.ok:
         if row is None:
-            row = FetchCache(url=url)
-            db.add(row)
-        _store(row, got, now)
-        db.flush()
+            _insert(db, url, got, now)
+        else:
+            _store(row, got, now)
+            db.flush()
     return FetchResult(got.ok, text=got.text, final_url=got.source_url, error=got.error), COMPARED
 
 

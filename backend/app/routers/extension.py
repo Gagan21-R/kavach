@@ -133,7 +133,7 @@ def _look_up(factory: sessionmaker, user_id: str, site: str) -> None:
 
 def _visit_state(db: Session, background: BackgroundTasks, user: User, site: str, refresh: bool = False) -> dict:
     tracked = _tracked(db, user.id, site)
-    v = db.execute(select(SiteVisit).where(SiteVisit.user_id == user.id, SiteVisit.domain == site)).scalar_one_or_none()
+    v = db.execute(select(SiteVisit).where(SiteVisit.user_id == user.id, SiteVisit.domain == site).order_by(SiteVisit.first_seen_at)).scalars().first()
     if tracked:  # verdict from Kavach's tracked copies: instant, no fetching
         verdict = {**tracked_summary(db, user, site, tracked), "name": tracked[0].name.rsplit(" ", 2)[0], "tracked": True}
         v = remember(db, user, site, verdict, "extension")
@@ -223,7 +223,7 @@ def ext_consent(body: ConsentIn, background: BackgroundTasks, ext: ExtensionClie
                      target_type="site", target_id=site, decision="BLOCK" if hits else None,
                      details={"kind": body.kind, "instructions_found": len(hits), "text_characters": len(body.text)})
     out = _visit_state(db, background, user, site)
-    v = db.execute(select(SiteVisit).where(SiteVisit.user_id == user.id, SiteVisit.domain == site)).scalar_one_or_none()
+    v = db.execute(select(SiteVisit).where(SiteVisit.user_id == user.id, SiteVisit.domain == site).order_by(SiteVisit.first_seen_at)).scalars().first()
     if v is not None:
         v.consent_moments += 1
         db.commit()

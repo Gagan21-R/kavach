@@ -44,7 +44,7 @@ def remember(db: Session, user: User, site: str, result: dict, via: str) -> Site
         conflict = result["status"] == "CONFLICT"
         notify(db, user.id, "site_review", f"{result.get('name') or site}: {'goes against your rules' if conflict else 'worth a look'}",
                (result.get("reasons") or [""])[0], tone="bad" if conflict else "warn", section="websites", ref_id=f"{site}:{result.get('risk_score')}")
-    v = db.execute(select(SiteVisit).where(SiteVisit.user_id == user.id, SiteVisit.domain == site)).scalar_one_or_none()
+    v = db.execute(select(SiteVisit).where(SiteVisit.user_id == user.id, SiteVisit.domain == site).order_by(SiteVisit.first_seen_at)).scalars().first()
     now = clock.utcnow()
     if v is None:
         v = SiteVisit(user_id=user.id, domain=site, first_seen_at=now, visit_count=0)
