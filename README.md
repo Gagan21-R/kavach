@@ -14,7 +14,7 @@ A multi-agent system that reads privacy policies, argues over them, enforces eac
 - **2-minute tour:**
   1. Create an account and answer the three first-run questions (what you're OK with, which apps you use).
   2. On **Home**, click **Load demo data**.
-  3. Install the [browser extension](#browser-extension), set its **Kavach address** to the live URL, and open the dashboard once while signed in: the extension connects itself.
+  3. Download **[Kavach-extension.zip](https://github.com/Gagan21-R/kavach/releases/latest/download/Kavach-extension.zip)** (already set up for the live demo), unzip it, and in `chrome://extensions` turn on Developer mode and **Load unpacked** the `kavach-extension` folder. Open the dashboard once while signed in and reload: the extension connects itself.
   4. Open a terms page such as https://openai.com/policies/terms-of-use/ or https://www.spotify.com/us/legal/end-user-agreement/. Kavach's six agents review the whole site and show a risk score, the clauses that clash with your rules, and **Track this website**.
   5. Back on the dashboard, **Websites** lists the site and Watchman keeps checking it for changes. **Rules & agents > More tools** has the Courtroom, Test history (Red Team postmortems) and the Audit log.
 - **Run it yourself:** [Run locally](#run-locally) (about 5 minutes) or [Deploy on Render](#deploy-on-render) (one Blueprint, free plans).
@@ -103,7 +103,7 @@ Set `CC_FETCH_CONTACT` (an email or URL) so site owners can reach whoever runs t
 3. Open that Kavach address in the same browser while signed in (reload once after signing in). The extension connects itself; there is no key to paste. Local and live are separate accounts.
 4. Open any privacy policy or terms page, for example https://www.spotify.com/us/legal/privacy-policy/. A panel shows one review of the whole site (its privacy policy and terms through all six agents) with **Track this website**.
 
-**A copy that already points to the live demo** (no Settings step): `python scripts/package_extension.py` writes `release/Kavach-extension.zip`. Unzip it and load the `kavach-extension` folder in step 1; its `README.txt` has the same steps. Pass another address to package it for your own server.
+**A copy that already points to the live demo** (no Settings step): download [Kavach-extension.zip](https://github.com/Gagan21-R/kavach/releases/latest/download/Kavach-extension.zip) from the [latest release](https://github.com/Gagan21-R/kavach/releases/latest), or build it with `python scripts/package_extension.py`, which writes `release/Kavach-extension.zip`. Unzip it and load the `kavach-extension` folder in step 1; its `README.txt` has the same steps. Pass another address to package it for your own server.
 
 ### Automatic checks and the monitoring inbox
 
