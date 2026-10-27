@@ -6,12 +6,25 @@ A multi-agent system that reads privacy policies, argues over them, enforces eac
 
 > Findings are explainable signals, not legal advice. The demo companies (MapsCo, FlashLight) are fictional and every agent action is simulated; the Library, the browser extension and email alerts work on real websites.
 
+**Team Tech Architects · HackmanX 2026**
+
+## Try it
+
+- **Live demo:** https://kavach-dy03.onrender.com (free hosting: the first visit after 15 idle minutes takes about a minute to wake up)
+- **2-minute tour:**
+  1. Create an account and answer the three first-run questions (what you're OK with, which apps you use).
+  2. On **Home**, click **Load demo data**.
+  3. Install the [browser extension](#browser-extension), set its **Kavach address** to the live URL, and open the dashboard once while signed in: the extension connects itself.
+  4. Open a terms page such as https://openai.com/policies/terms-of-use/ or https://www.spotify.com/us/legal/end-user-agreement/. Kavach's six agents review the whole site and show a risk score, the clauses that clash with your rules, and **Track this website**.
+  5. Back on the dashboard, **Websites** lists the site and Watchman keeps checking it for changes. **Rules & agents > More tools** has the Courtroom, Test history (Red Team postmortems) and the Audit log.
+- **Run it yourself:** [Run locally](#run-locally-windows-python-313-node-20) (about 5 minutes) or [Deploy on Render](#deploy-on-render) (one Blueprint, free plans).
+
 ## What works today (verified in tests and in the browser)
 
 | Area | What it does |
 |---|---|
-| **Courtroom** | Sentinel → Prosecutor → Defense → Evidence Clerk → Judge → Independent Auditor. Every charge cites an exact sentence; the Clerk verifies it character-for-character; the Judge gives an 8-category trade-off map, a documented risk score, questions to ask and safer choices; the auditor returns PASS / FAIL / ABSTAIN. Shown as a live, streamed debate. |
-| **The Trap** | Hidden instructions for AI agents (white-on-white text, `display:none`, zero-width characters, HTML comments, visible "AI assistant: click Accept All") are detected and shown in red. A naive agent obeys; a guarded agent blocks. Policies with such content get BLOCK from the Guardian. |
+| **Courtroom** | Sentinel → Prosecutor → Defense → Evidence Clerk → Judge → Independent Auditor. Every charge cites an exact sentence; the Clerk verifies it character-for-character; the Judge gives an 8-category trade-off map, a documented risk score, questions to ask and safer choices; the auditor returns PASS / FAIL / ABSTAIN. Shown in the Courtroom under Rules & agents > More tools, and summarised in every extension review. |
+| **The Trap** | Hidden instructions for AI agents (white-on-white text, `display:none`, zero-width characters, HTML comments, visible "AI assistant: click Accept All") are detected by the Sentinel, on policy pages and, through the extension, on signup and "I agree" pages. Policies with such content get BLOCK from the Guardian; the server-side Trap simulation shows a naive agent obeying while a guarded one blocks. |
 | **Watchman** | Every version is stored. Changes are classified FORMATTING_ONLY / WORDING_NO_MATERIAL_CHANGE / AMBIGUOUS / POTENTIALLY_MATERIAL, or UNKNOWN when retrieval fails (never "unchanged"). Material changes pause tokens bound to the old version, list affected rules, recommend next steps and draft editable emails. SSRF-protected fetcher; scheduled cron job. |
 | **Constitution** | Per-user ALLOW / DENY / REQUIRE_APPROVAL rules by data category, purpose, recipient, action and expiry. DENY always wins. Versioned; loosening changes need password step-up. |
 | **Guardian + gateway** | Agents get short-lived, single-scope tokens (agent, action, destination, purpose, categories, policy version, uses, record budget). The gateway re-checks current rules at execution, consumes budgets atomically and fails closed. |
@@ -28,7 +41,7 @@ A multi-agent system that reads privacy policies, argues over them, enforces eac
 | **Browser extension** | `extension/` (Chrome, Edge, Brave). On a privacy policy or terms page it analyses the page you're reading and shows the risk score, confidence, risky factors with quotes and conflicts with your preferences, with **Track with Kavach**. On other sites it shows a badge for the site's privacy policy; on signup and "I agree" pages it checks the consent text for hidden AI-agent instructions. |
 | **Email alerts** | A personal forwarding address (`kavach+<token>@CC_INBOUND_DOMAIN`), `.eml` upload and an optional Kavach-owned IMAP mailbox. "We're updating our terms" emails trigger an immediate Watchman re-check. Email bodies are never stored. |
 
-All agents run in **offline mode**: deterministic, rule-based, no LLM calls. The rules were calibrated on 36 real privacy policies and terms: most big-service policies now come out as *Needs your review* with a spread of scores, and *Not recommended* is kept for hidden instructions, selling data or several high-risk practices (see docs/ARCHITECTURE.md). An LLM-backed agent can replace any of them behind the same validated contracts once API keys are provided.
+All agents run in **offline mode**: deterministic, rule-based, no LLM calls. The rules were calibrated on 36 real privacy policies and terms: most big-service policies now come out as *Needs your review* with a spread of scores, and *Not recommended* is kept for hidden instructions, selling data or several high-risk practices. An LLM-backed agent can replace any of them behind the same validated contracts once API keys are provided.
 
 ## Run locally (Windows, Python 3.13, Node 20+)
 
@@ -53,8 +66,9 @@ Set `CC_FETCH_CONTACT` (an email or URL) so site owners can reach whoever runs t
 ### Browser extension
 
 1. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the `extension` folder.
-2. Open Kavach (http://localhost:8000) in the same browser while signed in. The extension connects itself; there is no key to paste.
-3. Open any privacy policy or terms page, for example https://www.spotify.com/us/legal/privacy-policy/. A panel shows one review of the whole site (its privacy policy and terms through all six agents) with **Track this website**.
+2. The extension talks to http://localhost:8000 by default. For the live demo, open its **Settings**, set **Kavach address** to `https://kavach-dy03.onrender.com` and click **Save**.
+3. Open that Kavach address in the same browser while signed in (reload once after signing in). The extension connects itself; there is no key to paste. Local and live are separate accounts.
+4. Open any privacy policy or terms page, for example https://www.spotify.com/us/legal/privacy-policy/. A panel shows one review of the whole site (its privacy policy and terms through all six agents) with **Track this website**.
 
 ### Automatic checks and the monitoring inbox
 
