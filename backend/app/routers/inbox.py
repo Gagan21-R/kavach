@@ -1,0 +1,131 @@
+"""Kavach's monitoring inbox.
+
+In production one mailbox that Kavach owns (for example a Gmail account) is signed up to the services, and Kavach
+reads it over IMAP on its automatic schedule (CC_IMAP_HOST / CC_IMAP_USER / CC_IMAP_PASSWORD). Users do nothing.
+For demos, an email can be delivered by hand (upload a .eml or use a generated sample); it is processed exactly as
+if it had arrived in that mailbox. A provider webhook (/inbound/email) is also available.
+"""
+import re
+import secrets
+from datetime import timedelta
+
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app import clock
+from app.acquire.catalogue import service_for_domain
+from app.acquire.tracking import site_domain
+from app.auth.crypto import constant_time_equal
+from app.auth.deps import UserContext, current_user
+from app.config import get_settings
+from app.db import get_db
+from app.errors import APIError, not_found
+from app.inbox import parse as email_parse
+from app.inbox.service import handle
+from app.models import EmailSignal, PolicySource, User
+from app.schemas.api import Strict
+from app.watchman import scheduler
+
+router = APIRouter(tags=["inbox"])
+MAX_EMAIL = 1_000_000
+_ADDR = re.compile(r"kavach\+([a-z0-9]{8,32})@", re.I)
+
+
+def _out(s: EmailSignal) -> dict:
+    return {"id": s.id, "channel": s.channel, "from_address": s.from_address, "from_domain": s.from_domain, "subject": s.subject,
+            "service_name": s.service_name, "authenticated": s.authenticated, "matched_phrases": s.matched_phrases,
+            "links": s.links, "actions": s.actions, "received_at": s.received_at}
+
+
+def mailbox_address() -> str:
+    s = get_settings()
+    return s.imap_user or "monitor@kavach.local"
+
+
+@router.get("/inbox")
+def inbox(ctx: UserContext = Depends(current_user), db: Session = Depends(get_db)):
+    s = get_settings()
+    rows = db.execute(select(EmailSignal).where(EmailSignal.user_id == ctx.user.id).order_by(EmailSignal.received_at.desc()).limit(30)).scalars()
+    tracked = db.execute(select(PolicySource).where(PolicySource.user_id == ctx.user.id, PolicySource.url.is_not(None))
+                         .order_by(PolicySource.created_at)).scalars()
+    return {
+        "mailbox": {"connected": bool(s.imap_host), "address": mailbox_address(), "every_minutes": s.watch_interval_minutes,
+                    "last_checked_at": scheduler.state["last_run_at"] if s.imap_host else None},
+        "signals": [_out(x) for x in rows],
+        "tracked": [{"id": p.id, "name": p.name} for p in tracked],
+    }
+
+
+class UploadIn(Strict):
+    raw: str = Field(min_length=10, max_length=MAX_EMAIL)
+
+
+@router.post("/inbox/upload")
+def upload(body: UploadIn, ctx: UserContext = Depends(current_user), db: Session = Depends(get_db)):
+    """Deliver an email to the monitoring inbox by hand (demo). Processed as if it arrived by IMAP, for this user."""
+    parsed = email_parse.parse(body.raw)
+    signals = handle(db, parsed, "upload", ctx.user)
+    db.commit()
+    return {"is_policy_update": parsed.is_policy_update, "from_domain": parsed.from_domain, "subject": parsed.subject,
+            "signal": _out(signals[0]) if signals else None,
+            "message": None if signals else "This email doesn't announce a privacy policy or terms change, so Kavach ignored it."}
+
+
+@router.get("/inbox/sample")
+def sample(policy_id: str = Query(...), ctx: UserContext = Depends(current_user), db: Session = Depends(get_db)):
+    """A realistic "we're updating our policy" email for one of the user's tracked policies, clearly marked as a sample."""
+    p = db.get(PolicySource, policy_id)
+    if p is None or p.user_id != ctx.user.id:
+        raise not_found("policy")
+    svc = service_for_domain(site_domain(p.domain))
+    name = svc["name"] if svc else site_domain(p.domain)
+    doc = "Terms of Service" if "terms" in p.name.lower() else "Privacy Policy"
+    when = (clock.utcnow() + timedelta(days=30)).strftime("%B %d, %Y").replace(" 0", " ")
+    raw = f"""From: {name} <policy-updates@{site_domain(p.domain)}>
+To: {mailbox_address()}
+Subject: We're updating our {doc}
+Date: {clock.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")}
+Message-ID: <{secrets.token_hex(8)}@sample.kavach.local>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hi,
+
+We're updating our {doc}. The new version takes effect on {when}. Here's what's changing:
+
+We will use the posts, messages and photos you share with us to train our generative AI models and those of our AI partners.
+
+We will share your activity and precise location data with advertising partners to show you personalised ads on other apps and websites.
+
+We will keep this information for as long as your account exists, and in some cases after you delete it.
+
+You can read the full {doc} here: {p.url or ""}
+
+Thanks,
+The {name} team
+
+(This is a sample email generated by Kavach for a demo. It was not sent by {name}.)
+"""
+    return {"raw": raw, "policy": {"id": p.id, "name": p.name}}
+
+
+@router.post("/inbound/email")
+async def inbound(request: Request, db: Session = Depends(get_db)):
+    """Provider webhook (Cloudflare Email Routing, Mailgun, SendGrid Inbound Parse) for the monitoring mailbox."""
+    secret = get_settings().inbound_secret
+    if not secret:
+        raise APIError(503, "INBOUND_DISABLED", "set CC_INBOUND_SECRET to receive email by webhook")
+    if not constant_time_equal(request.headers.get("x-inbound-secret", ""), secret):
+        raise APIError(401, "INBOUND_UNAUTHENTICATED", "bad or missing X-Inbound-Secret")
+    raw = await request.body()
+    if len(raw) > MAX_EMAIL:
+        raise APIError(413, "EMAIL_TOO_LARGE", "emails over 1 MB are ignored")
+    parsed = email_parse.parse(raw)
+    # Addressed to a user's own kavach+<token> address: that user only. Otherwise: everyone tracking the sender.
+    tokens = {m.group(1).lower() for r in parsed.recipients for m in [_ADDR.search(r)] if m}
+    users = [u for t in tokens for u in [db.execute(select(User).where(User.inbox_token == t)).scalar_one_or_none()] if u]
+    signals = [s for u in users for s in handle(db, parsed, "forward", u)] if users else handle(db, parsed, "mailbox")
+    db.commit()
+    return {"accepted": bool(signals), "signals": len(signals)}

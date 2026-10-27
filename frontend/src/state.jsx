@@ -90,5 +90,19 @@ export function useLoad(fn, deps = []) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   useEffect(() => { reload(); }, [reload]);
+  // One page shows every section, so a change made in one section refreshes the others quietly.
+  useChanged(useCallback(async () => {
+    try { setData(await fn()); setError(null); } catch { /* keep showing what we had */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps));
   return { data, error, loading, reload, setData };
+}
+
+export function useChanged(fn) {
+  useEffect(() => {
+    let t;
+    const h = () => { clearTimeout(t); t = setTimeout(fn, 250); };
+    window.addEventListener("kavach:changed", h);
+    return () => { window.removeEventListener("kavach:changed", h); clearTimeout(t); };
+  }, [fn]);
 }

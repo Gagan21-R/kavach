@@ -108,6 +108,8 @@ class StopIn(Strict):
     revoke_agents: bool = False
     revoke_other_sessions: bool = True
     pause_monitoring: bool = True
+    deny_pending_approvals: bool = True
+    disconnect_extensions: bool = False
 
 
 class RecoverIn(Strict):
@@ -125,7 +127,8 @@ def activate(body: StopIn, ctx: UserContext = Depends(current_user), db: Session
     """Tightening only, so no step-up: anyone signed in as the user can stop everything immediately."""
     inc = incidents.activate(db, ctx.user, ctx.session.id, reason=body.reason, revoke_tokens=body.revoke_tokens,
                              revoke_agents=body.revoke_agents, revoke_other_sessions=body.revoke_other_sessions,
-                             pause_monitoring=body.pause_monitoring)
+                             pause_monitoring=body.pause_monitoring, deny_pending_approvals=body.deny_pending_approvals,
+                             disconnect_extensions=body.disconnect_extensions)
     db.commit()
     return incidents.incident_out(inc)
 
@@ -142,7 +145,9 @@ def recover(body: RecoverIn, ctx: UserContext = Depends(current_user), db: Sessi
 @router.get("/emergency-stop/status")
 def stop_status(ctx: UserContext = Depends(current_user), db: Session = Depends(get_db)):
     inc = db.get(Incident, ctx.user.active_incident_id) if ctx.user.active_incident_id else None
-    return {"frozen": ctx.user.frozen, "active_incident": incidents.incident_out(inc) if inc else None}
+    return {"frozen": ctx.user.frozen, "active_incident": incidents.incident_out(inc) if inc else None,
+            "blocked_since_stop": incidents.blocked_since(db, inc) if inc else [],
+            "impact": None if ctx.user.frozen else incidents.preview(db, ctx.user, ctx.session.id)}
 
 
 @router.get("/incidents")

@@ -26,6 +26,9 @@ class FetchResult:
     text: str = ""
     final_url: str = ""
     error: str = ""
+    etag: str = ""
+    last_modified: str = ""
+    not_modified: bool = False  # the site answered 304: unchanged since the version we hold
 
 
 class FetchBlocked(Exception):
@@ -53,20 +56,24 @@ def _check_url(url: str) -> None:
             raise FetchBlocked(f"{host} resolves to a non-public address ({ip}); refusing to fetch")
 
 
-def fetch_policy(url: str, client: httpx.Client | None = None) -> FetchResult:
+def fetch_policy(url: str, client: httpx.Client | None = None, headers: dict | None = None) -> FetchResult:
+    """`headers` may carry If-None-Match / If-Modified-Since for a cheap "has it changed?" check."""
     own = client is None
     client = client or httpx.Client(timeout=TIMEOUT, follow_redirects=False, headers={"User-Agent": "Kavach-Watchman/1.0"})
     try:
         current = url
         for _ in range(MAX_REDIRECTS + 1):
             _check_url(current)
-            with client.stream("GET", current) as resp:
+            with client.stream("GET", current, headers=headers or None) as resp:
                 if resp.is_redirect:
                     location = resp.headers.get("location")
                     if not location:
                         return FetchResult(False, error="redirect without a location")
                     current = urljoin(current, location)
                     continue
+                if resp.status_code == 304 and headers:
+                    return FetchResult(True, final_url=current, not_modified=True,
+                                       etag=resp.headers.get("etag", ""), last_modified=resp.headers.get("last-modified", ""))
                 if resp.status_code != 200:
                     return FetchResult(False, error=f"HTTP {resp.status_code}", final_url=current)
                 ctype = resp.headers.get("content-type", "")
@@ -77,7 +84,8 @@ def fetch_policy(url: str, client: httpx.Client | None = None) -> FetchResult:
                     body += chunk
                     if len(body) > MAX_BYTES:
                         return FetchResult(False, error="document larger than 2 MB", final_url=current)
-                return FetchResult(True, text=body.decode(resp.encoding or "utf-8", errors="replace"), final_url=current)
+                return FetchResult(True, text=body.decode(resp.encoding or "utf-8", errors="replace"), final_url=current,
+                                   etag=resp.headers.get("etag", ""), last_modified=resp.headers.get("last-modified", ""))
         return FetchResult(False, error="too many redirects")
     except FetchBlocked as e:
         return FetchResult(False, error=str(e))

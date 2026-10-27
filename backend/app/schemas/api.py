@@ -46,6 +46,7 @@ class UserOut(BaseModel):
     id: str
     email: str
     constitution_version: int
+    onboarded: bool = False
 
 
 class LoginOut(BaseModel):
@@ -123,6 +124,7 @@ class RuleOut(BaseModel):
     expires_at: datetime | None
     active: bool
     supersedes_id: str | None
+    group_id: str | None = None
     constitution_version: int
     created_at: datetime
     revoked_at: datetime | None

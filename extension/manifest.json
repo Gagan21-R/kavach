@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Kavach",
+  "version": "1.1.0",
+  "description": "Reviews the privacy policy and terms of the sites you visit against your Kavach preferences, and warns you on signup and \"I agree\" pages.",
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": { "default_popup": "popup.html", "default_title": "Kavach", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } },
+  "options_page": "options.html",
+  "background": { "service_worker": "background.js" },
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "incognito": "not_allowed",
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [{ "resources": ["icons/32.png"], "matches": ["http://*/*", "https://*/*"] }]
+}

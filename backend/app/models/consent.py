@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, UTCDateTime
@@ -27,6 +27,8 @@ class ConsentRule(Base):
     expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     supersedes_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Set for rules that belong to a rule group; general rules (from sign-up and the ledger) have none.
+    group_id: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
     constitution_version: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
@@ -93,4 +95,30 @@ class TokenUse(Base):
     outcome: Mapped[str] = mapped_column(String(30))  # ACCEPTED or a rejection code
     records: Mapped[int] = mapped_column(Integer, default=0)
     detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
+
+
+class RuleGroup(Base):
+    """A named set of answers for some websites, e.g. "Shopping". Only OK and Ask are stored: anything not listed is
+    denied for sites in the group. Sites not in any group use the general rules from sign-up."""
+
+    __tablename__ = "rule_groups"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    choices: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
+
+
+class GroupSite(Base):
+    """A website (registrable domain) placed in one of the user's rule groups."""
+
+    __tablename__ = "group_sites"
+    __table_args__ = (UniqueConstraint("user_id", "domain", name="uq_group_sites_user_domain"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    group_id: Mapped[str] = mapped_column(ForeignKey("rule_groups.id"), index=True)
+    domain: Mapped[str] = mapped_column(String(253))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)

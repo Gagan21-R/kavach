@@ -79,7 +79,9 @@ def _usable(rule: RuleLike, now: datetime) -> bool:
     return rule.active and (rule.expires_at is None or rule.expires_at > now)
 
 
-def evaluate(rules: Iterable[RuleLike], req: ActionRequest, now: datetime) -> EngineResult:
+def evaluate(rules: Iterable[RuleLike], req: ActionRequest, now: datetime, deny_unlisted: str | None = None) -> EngineResult:
+    """`deny_unlisted` names a rule group: within a group, anything the user didn't allow or mark "ask me" is denied
+    (instead of needing approval, as it does under the general rules)."""
     missing = [
         name
         for name, value in (
@@ -112,6 +114,10 @@ def evaluate(rules: Iterable[RuleLike], req: ActionRequest, now: datetime) -> En
         elif by_effect[RuleEffect.ALLOW]:
             decision, deciding = Decision.ALLOW, by_effect[RuleEffect.ALLOW]
             reason = f"'{category}' for '{req.purpose}' to {req.destination} is allowed by your rule"
+        elif deny_unlisted is not None:
+            decision, deciding = Decision.BLOCK, []
+            reason = (f"'{category}' for '{req.purpose}' isn't something you allowed for the {deny_unlisted} group, "
+                      "so it is denied")
         else:
             decision, deciding = Decision.REVIEW, []
             reason = (

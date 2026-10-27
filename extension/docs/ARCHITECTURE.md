@@ -112,7 +112,15 @@ The mutation checks run during M1 disabled four controls one at a time: the dest
 - **Order:** Sentinel → Prosecutor → Defense → Evidence Clerk → Judge → Independent Auditor. The sequence is fixed: no loops, no tools, a 5-second budget per step.
 - **Validation:** every output passes `validate_agent_output` before the next agent reads it. A malformed output ends the run as FAILED with auditor ABSTAIN, and the Guardian then asks for the user's approval.
 - **Untrusted input:** policy HTML is parsed with the standard library parser. Hidden text is split out and never becomes "canonical" text. Citations are character offsets into the canonical text.
-- **Risk score:** `cc-risk-v1`, a sum of per-category weights. It is documented in the UI as a formula, not a probability.
+- **Risk score:** `cc-risk-v2`, a sum of per-category weights (high 20, medium 8, low 2, unknown 4), capped at 100. It is a formula, not a probability.
+- **Calibration (rules v2):** tuned on 36 real privacy policies and terms from the Library (Google, Meta, Microsoft, OpenAI, Uber, Zomato and others).
+  - Before: 18 of 21 real documents were BLOCK, mean risk 74, and one long policy failed the Judge's contract.
+  - After: 32 REVIEW, 2 BLOCK, 2 ALLOW, mean risk 43, auditor PASS on all 36. Red Team Lab unchanged at 34/36.
+  - Fixed false positives: "contacts" in other senses, "sell" without personal data as the object, rules aimed at the user ("you may not sell the Service"), headings, curly-quoted denials, and legal uses of "agent" or "act as" tripping the Sentinel.
+  - A real choice for the user (opt-out, settings, consent) or de-identified data now partly answers a charge, so a high-risk finding counts as medium.
+  - BLOCK now means hidden instructions, two or more high-risk practices, or selling data / using data brokers. One high-risk practice on its own is REVIEW.
+  - Copies that are not in English are not used, because the rules read English only.
+  - **Limitation:** the corpus is a development set, not a labelled holdout, so these are better-calibrated signals, not measured accuracy.
 - **Confidence:** reported in components. Each part is labelled heuristic or not_available, never calibrated.
 - **Auditor:** blind to the debate text. It uses its own omission scan, recomputes the score, and checks every citation and claim category.
   - **Limitation:** it lives in the same codebase and shares the keyword lexicon, so its independence is limited. A different model or provider would make it more independent.

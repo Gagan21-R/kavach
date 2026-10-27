@@ -16,7 +16,7 @@ from app.engine.hosts import host_matches
 from app.models import ConsentRule, ConsentToken, PolicySnapshot, PolicySource, User, WatchEvent
 from app.schemas.agents import AgentName, validate_agent_output
 from app.watchman import diff
-from app.watchman.fetch import fetch_policy
+from app.acquire import service as acq
 
 POLICY_TO_DATA = {"location": {"location"}, "contacts": {"contacts"}, "biometrics": {"biometrics"}}
 POLICY_TO_PURPOSE = {
@@ -134,6 +134,11 @@ def record_snapshot(db: Session, policy: PolicySource, text: str, actor_type: st
                      details={"version": snap.version, "hash": snap.content_hash, "previous_hash": previous.content_hash,
                               "classification": classification})
     if classification in diff.MATERIAL:
+        from app.notifications import notify
+
+        notify(db, policy.user_id, "policy_changed", f"{policy.name} changed",
+               "The new wording isn't covered by your earlier review. Agent permissions for it are paused until you look.",
+               tone="bad", section="watchman", ref_id=f"{policy.id}:{snap.version}")
         audit_log.record(db, "consent.review.required", user_id=policy.user_id, actor_type="system",
                          target_type="policy", target_id=policy.id, decision="REVIEW",
                          details={"classification": classification, "categories": sorted(categories),
@@ -144,15 +149,34 @@ def record_snapshot(db: Session, policy: PolicySource, text: str, actor_type: st
     return ev
 
 
-def check_source(db: Session, policy: PolicySource, actor_type: str = "system", actor_id: str | None = None, fetcher=fetch_policy) -> WatchEvent:
-    """Fetch the policy URL and compare. A failed fetch is UNKNOWN, never UNCHANGED."""
+def _site_still_shows_pre_announcement(db: Session, policy: PolicySource, text: str) -> bool:
+    """After a version built from an emailed announcement, the site may keep showing the old text until the change
+    takes effect. That is not a new change (and must not undo the announced one)."""
+    last = db.execute(select(WatchEvent).where(WatchEvent.source_id == policy.id, WatchEvent.status == "CHANGED")
+                      .order_by(WatchEvent.created_at.desc()).limit(1)).scalar_one_or_none()
+    if last is None or last.output.get("source") != "EMAIL" or last.to_version != policy.current_version:
+        return False
+    before = db.execute(select(PolicySnapshot).where(PolicySnapshot.source_id == policy.id,
+                                                     PolicySnapshot.version == last.from_version)).scalar_one_or_none()
+    return before is not None and before.content_hash == content_hash(text)
+
+
+def check_source(db: Session, policy: PolicySource, actor_type: str = "system", actor_id: str | None = None, fetcher=None) -> WatchEvent:
+    """Fetch the policy URL and compare. A failed fetch is UNKNOWN, never UNCHANGED.
+
+    By default the site is first asked whether the page changed (ETag / Last-Modified); only then is it downloaded
+    and compared. `fetcher` replaces that with any url -> FetchResult function (tests, cron)."""
     now = clock.utcnow()
     policy.last_checked_at = now
+    how = ""
     if not policy.url:
         result_ok, error = False, "this policy has no URL to check; paste a new version instead"
         res = None
     else:
-        res = fetcher(policy.url)
+        if fetcher is None:
+            res, how = acq.recheck(db, policy.url)
+        else:
+            res, how = fetcher(policy.url), acq.COMPARED
         result_ok, error = res.ok, res.error
     if not result_ok:
         policy.watch_status, policy.watch_error = "UNKNOWN", error
@@ -162,14 +186,24 @@ def check_source(db: Session, policy: PolicySource, actor_type: str = "system", 
         db.add(ev)
         audit_log.record(db, "policy.watch.unknown", user_id=policy.user_id, actor_type=actor_type, actor_id=actor_id,
                          target_type="policy", target_id=policy.id, details={"error": error})
+        from app.notifications import notify
+
+        notify(db, policy.user_id, "policy_unreadable", f"Couldn't read {policy.name}",
+               "Kavach can't confirm it's unchanged, so new agent permissions for it need your approval until a check works.",
+               tone="warn", section="watchman", ref_id=policy.id)
         db.flush()
         return ev
-    changed = record_snapshot(db, policy, res.text, actor_type, actor_id)
+    if _site_still_shows_pre_announcement(db, policy, res.text):
+        how = "The site still shows the version from before the change announced by email"
+        changed = None
+    else:
+        changed = record_snapshot(db, policy, res.text, actor_type, actor_id)
     if changed is not None:
+        changed.output = {**changed.output, "checked_by": how}
         return changed
     policy.watch_status, policy.watch_error = "OK", None
     ev = WatchEvent(user_id=policy.user_id, source_id=policy.id, status="NO_CHANGE", from_version=policy.current_version,
-                    to_version=policy.current_version, recommendations=recommendations("NO_CHANGE", set()))
+                    to_version=policy.current_version, output={"checked_by": how}, recommendations=recommendations("NO_CHANGE", set()))
     db.add(ev)
     db.flush()
     return ev

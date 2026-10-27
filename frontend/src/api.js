@@ -37,6 +37,9 @@ async function raw(method, path, { body, agentKey, consentToken } = {}) {
   return { res, data };
 }
 
+// Calls that only read or preview (even though they POST) do not refresh the rest of the dashboard.
+const QUIET = ["/auth/", "/chat", "/demo/trap", "/provider-requests/draft"];
+
 export async function api(method, path, opts = {}) {
   let { res, data } = await raw(method, path, opts);
   if (res.status === 403 && data?.error?.code === "STEP_UP_REQUIRED" && stepUpHandler && !opts.agentKey) {
@@ -44,6 +47,9 @@ export async function api(method, path, opts = {}) {
     if (ok) ({ res, data } = await raw(method, path, opts));
   }
   if (res.status === 401 && !opts.agentKey && unauthorizedHandler && !path.startsWith("/auth/")) unauthorizedHandler();
+  if (res.ok && method !== "GET" && !QUIET.some((p) => path.startsWith(p))) {
+    window.dispatchEvent(new Event("kavach:changed"));
+  }
   if (!res.ok && !opts.allowError) throw new ApiError(res.status, data);
   return opts.allowError ? { status: res.status, data } : data;
 }

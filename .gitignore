@@ -28,3 +28,9 @@ desktop.ini
 
 # Local tool config (contains machine-specific paths)
 .claude/
+
+# Local test run history (see app/testhistory.py)
+backend/test-history/
+
+# Shareable zips (built from the repository)
+release/

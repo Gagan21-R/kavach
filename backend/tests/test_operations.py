@@ -153,6 +153,14 @@ def test_red_team_lab_is_reproducible_and_honest():
     assert s["citation_support_rate"] == 1.0
 
 
+def test_red_team_lab_still_signs_in_with_secure_cookies(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "cookie_secure", True)  # production setting on Render
+    s = lab.run(seed=11)["summary"]
+    assert s["abstained"] == 0 and s["passed"] == len(lab.SCENARIOS) - 2
+
+
 def test_red_team_run_endpoint(make_actor):
     user = make_actor()
     r = user.client.post("/red-team/runs", json={"seed": 3, "scenario_ids": ["TOK-05", "GRD-01"]}).json()

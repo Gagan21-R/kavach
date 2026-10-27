@@ -36,7 +36,8 @@ def _event_out(e: WatchEvent) -> dict:
     return {"id": e.id, "status": e.status, "classification": e.classification, "from_version": e.from_version,
             "to_version": e.to_version, "changes": e.output.get("changes", []), "confidence": e.output.get("confidence"),
             "affected_rule_ids": e.affected_rule_ids, "affected_token_ids": e.affected_token_ids,
-            "recommendations": e.recommendations, "error": e.error, "created_at": e.created_at}
+            "recommendations": e.recommendations, "error": e.error, "created_at": e.created_at,
+            "checked_by": e.output.get("checked_by", ""), "source": e.output.get("source", "")}
 
 
 def policy_summary(db: Session, p: PolicySource) -> dict:
@@ -141,3 +142,32 @@ def mark_reassessed(policy_id: str, ctx: UserContext = Depends(current_user), db
                      target_type="policy", target_id=policy.id, details={"hash": policy.current_hash, "version": policy.current_version})
     db.commit()
     return policy_summary(db, policy)
+
+
+watch_router = APIRouter(prefix="/watchman", tags=["watchman"])
+
+
+@watch_router.get("/status")
+def watch_status(ctx: UserContext = Depends(current_user), db: Session = Depends(get_db)):
+    from app.config import get_settings
+    from app.watchman import scheduler
+
+    rows = list(db.execute(select(PolicySource).where(PolicySource.user_id == ctx.user.id)).scalars())
+    checked = [p.last_checked_at for p in rows if p.last_checked_at]
+    return {"automatic": scheduler.state["running"], "every_minutes": get_settings().watch_interval_minutes,
+            "last_run_at": scheduler.state["last_run_at"], "next_run_at": scheduler.state["next_run_at"],
+            "last_checked_at": max(checked) if checked else None, "policies": len(rows),
+            "needs_review": sum(p.requires_reassessment for p in rows), "unknown": sum(p.watch_status == "UNKNOWN" for p in rows)}
+
+
+@watch_router.post("/check-all")
+def check_all(ctx: UserContext = Depends(current_user), db: Session = Depends(get_db)):
+    """Re-check every tracked policy now (the same check the schedule runs)."""
+    rows = list(db.execute(select(PolicySource).where(PolicySource.user_id == ctx.user.id, PolicySource.url.is_not(None))).scalars())
+    out = []
+    for p in rows:
+        ev = watchman.check_source(db, p, "user", ctx.user.id)
+        out.append({"policy_id": p.id, "name": p.name, **_event_out(ev)})
+    db.commit()
+    return {"checked": len(out), "changed": sum(e["status"] == "CHANGED" for e in out),
+            "unknown": sum(e["status"] == "UNKNOWN" for e in out), "results": out}

@@ -7,11 +7,11 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app import context
+from app import context, notifications, testhistory
 from app.config import get_settings
 from app.db import SessionLocal
 from app.errors import APIError, api_error_handler
-from app.routers import agents, audit, auth, demo, gateway, guardian, ops, policies, rules
+from app.routers import agents, audit, auth, demo, extension, gateway, groups, guardian, inbox, library, onboarding, ops, policies, rules, sites
 from app.vocab import Decision
 
 log = logging.getLogger("consent_court")
@@ -45,7 +45,7 @@ def create_app() -> FastAPI:
         allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["Content-Type", "X-CSRF-Token", "X-Agent-Key", "X-Consent-Token", "X-Request-ID"],
+        allow_headers=["Content-Type", "X-CSRF-Token", "X-Agent-Key", "X-Consent-Token", "X-Extension-Key", "X-Request-ID"],
     )
 
     @app.middleware("http")
@@ -66,7 +66,7 @@ def create_app() -> FastAPI:
         return response
 
     for r in (auth.router, agents.router, rules.router, policies.router, guardian.router, gateway.router, audit.router,
-              ops.router, demo.router):
+              ops.router, demo.router, library.router, onboarding.router, extension.router, inbox.router, sites.router, policies.watch_router, groups.router, notifications.router, testhistory.router):
         app.include_router(r)
 
     @app.get("/health", tags=["ops"])

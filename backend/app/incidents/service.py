@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app import audit_log, clock
 from app.errors import APIError, not_found
-from app.models import AgentClient, AuthSession, ConsentToken, Incident, User
+from app.models import AgentClient, ApprovalRequest, AuditEvent, AuthSession, ConsentToken, ExtensionClient, Incident, User
 
 EXTERNAL_LIMITS = (
     "Data already delivered to other companies before the stop cannot be recalled by Kavach. "
@@ -23,7 +23,8 @@ def _event(incident: Incident, state: str, note: str) -> None:
 
 
 def activate(db: Session, user: User, current_session_id: str, *, reason: str, revoke_tokens: bool = True,
-             revoke_agents: bool = False, revoke_other_sessions: bool = True, pause_monitoring: bool = True) -> Incident:
+             revoke_agents: bool = False, revoke_other_sessions: bool = True, pause_monitoring: bool = True,
+             deny_pending_approvals: bool = True, disconnect_extensions: bool = False) -> Incident:
     if user.frozen and user.active_incident_id:
         raise APIError(409, "ALREADY_ACTIVE", "Emergency Stop is already active", incident_id=user.active_incident_id)
     now = clock.utcnow()
@@ -39,11 +40,20 @@ def activate(db: Session, user: User, current_session_id: str, *, reason: str, r
                        .values(revoked_at=now, revocation_reason=f"emergency stop {incident.id}")
                        .execution_options(synchronize_session=False)).rowcount
         actions.append({"step": "revoke_tokens", "detail": "All active consent tokens revoked", "count": n})
+    if deny_pending_approvals:
+        n = db.execute(update(ApprovalRequest).where(ApprovalRequest.user_id == user.id, ApprovalRequest.status == "PENDING")
+                       .values(status="DENIED", decided_at=now, reason=f"denied by emergency stop {incident.id}")
+                       .execution_options(synchronize_session=False)).rowcount
+        actions.append({"step": "deny_pending_approvals", "detail": "Agent requests waiting for your decision were denied", "count": n})
     if revoke_agents:
         agent_ids = list(db.execute(select(AgentClient.id).where(AgentClient.user_id == user.id, AgentClient.active.is_(True))).scalars())
         db.execute(update(AgentClient).where(AgentClient.id.in_(agent_ids)).values(active=False, revoked_at=now)
                    .execution_options(synchronize_session=False))
         actions.append({"step": "revoke_agent_keys", "detail": "Agent API keys disabled; issue new keys after recovery", "count": len(agent_ids)})
+    if disconnect_extensions:
+        n = db.execute(update(ExtensionClient).where(ExtensionClient.user_id == user.id, ExtensionClient.active.is_(True))
+                       .values(active=False, revoked_at=now).execution_options(synchronize_session=False)).rowcount
+        actions.append({"step": "disconnect_extensions", "detail": "Browser extensions disconnected; they reconnect when you open Kavach again", "count": n})
     if revoke_other_sessions:
         n = db.execute(update(AuthSession).where(AuthSession.user_id == user.id, AuthSession.id != current_session_id,
                                                  AuthSession.revoked_at.is_(None))
@@ -60,6 +70,35 @@ def activate(db: Session, user: User, current_session_id: str, *, reason: str, r
                      target_type="incident", target_id=incident.id, decision="BLOCK",
                      details={"reason": reason, "actions": [{"step": a["step"], "count": a["count"]} for a in actions]})
     return incident
+
+
+def preview(db: Session, user: User, current_session_id: str) -> dict:
+    """What an Emergency Stop would affect right now, so the user knows before pressing it."""
+    from sqlalchemy import func
+
+    now = clock.utcnow()
+
+    def count(model, *where):
+        return db.execute(select(func.count()).select_from(model).where(*where)).scalar() or 0
+
+    return {
+        "agents": count(AgentClient, AgentClient.user_id == user.id, AgentClient.active.is_(True)),
+        "active_tokens": count(ConsentToken, ConsentToken.user_id == user.id, ConsentToken.revoked_at.is_(None), ConsentToken.expires_at > now),
+        "pending_approvals": count(ApprovalRequest, ApprovalRequest.user_id == user.id, ApprovalRequest.status == "PENDING"),
+        "other_sessions": count(AuthSession, AuthSession.user_id == user.id, AuthSession.id != current_session_id,
+                                AuthSession.revoked_at.is_(None), AuthSession.expires_at > now),
+        "extensions": count(ExtensionClient, ExtensionClient.user_id == user.id, ExtensionClient.active.is_(True)),
+    }
+
+
+def blocked_since(db: Session, incident: Incident, limit: int = 20) -> list[dict]:
+    """Attempts the stop refused: agent and extension requests turned away after containment."""
+    if incident.contained_at is None:
+        return []
+    rows = db.execute(select(AuditEvent).where(AuditEvent.user_id == incident.user_id, AuditEvent.created_at >= incident.contained_at,
+                                               AuditEvent.decision == "BLOCK", AuditEvent.actor_type.in_(("agent", "extension")))
+                      .order_by(AuditEvent.seq.desc()).limit(limit)).scalars()
+    return [{"at": e.created_at, "event": e.event_type, "actor": e.actor_type, "target": e.target_id} for e in rows]
 
 
 def owned_incident(db: Session, user_id: str, incident_id: str) -> Incident:

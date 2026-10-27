@@ -6,11 +6,14 @@ Same-origin serving keeps the SameSite=Strict session cookie working without COR
 """
 from pathlib import Path
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.main import create_app
+from app.watchman import scheduler
 
 DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
@@ -19,7 +22,14 @@ CSP = (
     "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 )
 
-app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    scheduler.start()  # automatic Watchman checks and monitoring-inbox reads
+    yield
+    scheduler.stop()
+
+
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 app.mount("/api", create_app())
 
 
@@ -42,7 +52,8 @@ if DIST.is_dir():
         candidate = (DIST / path).resolve()
         if path and candidate.is_file() and DIST.resolve() in candidate.parents:
             return FileResponse(candidate)
-        return FileResponse(DIST / "index.html")
+        # index.html must always be revalidated so a new build shows immediately; hashed assets cache normally.
+        return FileResponse(DIST / "index.html", headers={"Cache-Control": "no-cache"})
 else:
 
     @app.get("/", include_in_schema=False)

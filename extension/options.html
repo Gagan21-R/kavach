@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Kavach settings</title>
+  <link rel="stylesheet" href="popup.css" />
+  <style>
+    body { width: auto; max-width: 560px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 24px; font-weight: 400; color: #f1f2f5; margin: 14px 0 6px; }
+    label.f { display: block; margin-top: 18px; color: #8b909b; font: 10.5px ui-monospace, Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
+    input[type=text], textarea { width: 100%; margin-top: 6px; padding: 10px 12px; background: rgba(255,255,255,.03); color: #f1f2f5; border: 1px solid #2a3345; border-radius: 4px; font: 13px "Segoe UI", system-ui, sans-serif; }
+    .hint { color: #8b909b; margin-top: 8px; }
+    .row { display: flex; gap: 10px; align-items: center; margin-top: 22px; }
+    .state { margin-top: 14px; padding: 12px 14px; border: 1px solid #1b2231; border-radius: 6px; }
+    #msg { color: #7fd3a6; }
+  </style>
+</head>
+<body>
+  <span class="brand"><img src="icons/32.png" alt="" /> <span class="mark">KAVACH</span></span>
+  <h1>Settings</h1>
+  <div class="state" id="state">Checking connection…</div>
+  <label class="f" for="server">Kavach address</label>
+  <input type="text" id="server" placeholder="http://localhost:8000" />
+  <label class="f" for="excluded">Never check these sites (one per line)</label>
+  <textarea id="excluded" rows="4" placeholder="mybank.com"></textarea>
+  <p class="hint">The extension connects by itself when you open Kavach at this address while signed in. On ordinary pages it sends only the site’s name (like spotify.com). On a privacy policy or terms page it sends that page’s address and text so the site can be reviewed. On signup and “I agree” pages it sends the consent text to check it for hidden instructions. Private windows are never checked.</p>
+  <div class="row"><button id="save">Save</button><button id="disconnect" class="link">Disconnect this browser</button><span id="msg"></span></div>
+  <script src="shared.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

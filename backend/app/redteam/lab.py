@@ -28,6 +28,100 @@ from app.models import AuthSession, ConsentToken, FlowEvent
 
 PASSWORD = "red-team-lab-password-1"
 
+# --- trace: what each scenario involved, for the postmortem report -----------------------------------------------
+# While a scenario runs, every write it makes through the app and every policy it puts on trial is noted here.
+
+_trace: dict | None = None
+_verdicts: dict[str, dict] = {}
+
+_STEPS = [  # (path prefix, path suffix, what it means in plain words)
+    ("/consent/rules", "", "set a consent rule"),
+    ("/policies", "/snapshots", "published a new version of the policy"),
+    ("/policies", "/check", "re-checked the policy online"),
+    ("/policies", "", "added a policy to watch"),
+    ("/agents", "", "connected an AI agent"),
+    ("/guardian/authorize", "", "asked permission"),
+    ("/guardian/revoke", "", "revoked the permission"),
+    ("/gateway/execute", "", "tried to send data through the gateway"),
+    ("/emergency-stop/activate", "", "pressed Emergency Stop"),
+    ("/emergency-stop/recover", "", "asked to restore agents"),
+    ("/chat/explain", "", "asked the assistant"),
+    ("/provider-requests/draft", "", "drafted an email to the company"),
+    ("/provider-requests/send", "", "tried to send the email"),
+    ("/data-flow/assets", "", "registered a piece of data"),
+]
+
+
+def _short(v, n=240):
+    if isinstance(v, str):
+        return v if len(v) <= n else v[:n] + "…"
+    if isinstance(v, dict):
+        return {k: _short(x, n) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_short(x, n) for x in v[:12]]
+    return v
+
+
+def _verdict(text: str, name: str) -> dict:
+    """Kavach's own verdict on a policy, as a user would see it (cached: the same fixtures recur)."""
+    from app.court import report
+
+    key = hashlib.sha256(f"{name}|{text}".encode()).hexdigest()
+    if key not in _verdicts:
+        try:
+            v = report.summarize(report.trial(text, name))
+            _verdicts[key] = {"recommendation": v["recommendation"], "risk_score": v["risk_score"], "confidence": v["confidence"],
+                              "headline": v["headline"], "factors": [f.get("label") or f.get("category") for f in v["factors"]][:6]}
+        except Exception as e:  # the report must never break a run
+            _verdicts[key] = {"recommendation": None, "headline": f"could not be assessed: {type(e).__name__}"}
+    return _verdicts[key]
+
+
+def _note_policy(name: str, text: str, how: str, verdict: dict | None = None):
+    if _trace is None:
+        return
+    if any(p["name"] == name and p["text"] == text[:4000] for p in _trace["policies"]):
+        return
+    _trace["policies"].append({"name": name, "how": how, "text": text[:4000], "chars": len(text),
+                               "verdict": verdict or _verdict(text, name)})
+
+
+def _note_call(client, method: str, url: str, body, response):
+    if _trace is None or method.upper() == "GET" or url.startswith("/auth/"):
+        return
+    what = next((w for pre, suf, w in _STEPS if url.startswith(pre) and url.endswith(suf)), url)
+    actor = "AI agent" if "X-Agent-Key" in client.headers else "User"
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    err = data.get("error") if isinstance(data.get("error"), dict) else {}
+    we = data.get("watch_event") if isinstance(data.get("watch_event"), dict) else {}
+    outcome = err.get("code") or data.get("decision") or we.get("classification") or data.get("status")
+    reasons = (data.get("evaluation") or {}).get("reasons") or (data.get("error") if isinstance(data.get("error"), str) else None)
+    req = {k: v for k, v in (body or {}).items() if k not in ("password", "text")}
+    _trace["steps"].append({"actor": actor, "did": what, "request": _short(req), "status": response.status_code,
+                            "outcome": outcome or ("OK" if response.status_code < 400 else f"HTTP {response.status_code}"),
+                            "reasons": _short(reasons or err.get("message") or "", 300)})
+    names = _trace.setdefault("names", {})
+    if url == "/policies" and data.get("id"):
+        names[data["id"]] = (body or {}).get("name")
+    if body and isinstance(body.get("text"), str):
+        if url == "/policies":
+            _note_policy(body.get("name") or "Policy", body["text"], "added by the scenario")
+        else:
+            pid = url.split("/")[2] if url.count("/") >= 3 else ""
+            _note_policy(f"{names.get(pid) or 'Policy'}, new version", body["text"], "published as a new version")
+
+
+class _TracedClient(TestClient):
+    def request(self, method, url, *args, **kwargs):
+        r = super().request(method, url, *args, **kwargs)
+        _note_call(self, method, str(url), kwargs.get("json"), r)
+        return r
+
 
 class Lab:
     def __init__(self):
@@ -58,7 +152,8 @@ class Lab:
         self.engine.dispose()
 
     def client(self) -> TestClient:
-        return TestClient(self.app, raise_server_exceptions=False)
+        # https so the session cookie still travels when CC_COOKIE_SECURE is on (always in production).
+        return _TracedClient(self.app, base_url="https://testserver", raise_server_exceptions=False)
 
     def user(self):
         self.n += 1
@@ -121,7 +216,10 @@ def _adapter_calls(lab, token_id):
 
 
 def _trial(text, name="Lab", tamper=None):
-    return run_trial(text, snapshot_id="lab", policy_hash=hashlib.sha256(text.encode()).hexdigest(), app_name=name, tamper=tamper)
+    r = run_trial(text, snapshot_id="lab", policy_hash=hashlib.sha256(text.encode()).hexdigest(), app_name=name, tamper=tamper)
+    # The listed verdict is always Kavach's honest one; a tampered agent is part of the check, not of the policy.
+    _note_policy(f"{_trace['id']} test page" if name == "Lab" and _trace else name, text, "put on trial")
+    return r
 
 
 # --- scenarios: each returns (actual, passed, evidence) -----------------------
@@ -158,8 +256,8 @@ def pol_severe(lab):
 
 def pol_citations(lab):
     total = valid = 0
-    for text in (fx.FLASHLIGHT["text"], fx.MAPSCO["text"], fx.MAPSCO_BETRAYAL):
-        r = _trial(text)
+    for text, name in ((fx.FLASHLIGHT["text"], "FlashLight"), (fx.MAPSCO["text"], "MapsCo"), (fx.MAPSCO_BETRAYAL, "MapsCo (changed)")):
+        r = _trial(text, name)
         for c in r["clerk"]["checks"]:
             if c["note"].startswith("prosecution"):
                 total += 1
@@ -189,7 +287,7 @@ def aud_disagree(lab):
         if name.value == "judge":
             out["recommendation"] = "ALLOW"
         return out
-    r = _trial(fx.MAPSCO_BETRAYAL, "MapsCo", tamper)
+    r = _trial(fx.MAPSCO_BETRAYAL, "MapsCo (changed)", tamper)
     kinds = [i["kind"] for i in r["auditor"]["issues"]]
     return f"auditor {r['auditor']['verdict']} ({', '.join(kinds)})", r["auditor"]["verdict"] == "FAIL" and "self_contradiction" in kinds, "Judge tampered to ALLOW despite high-risk categories"
 
@@ -482,6 +580,7 @@ SCENARIOS = [
 
 
 def run(seed: int = 7, only: list[str] | None = None) -> dict:
+    global _trace
     order = [s for s in SCENARIOS if not only or s[0] in only]
     random.Random(seed).shuffle(order)
     lab = Lab()
@@ -491,6 +590,7 @@ def run(seed: int = 7, only: list[str] | None = None) -> dict:
     try:
         for sid, cat, desc, expected, fn, label in order:
             t = time.monotonic()
+            _trace = {"id": sid, "policies": [], "steps": []}
             try:
                 actual, passed, evidence = fn(lab)
                 status = "PASS" if passed else "FAIL"
@@ -499,8 +599,11 @@ def run(seed: int = 7, only: list[str] | None = None) -> dict:
                 actual, status, evidence, explanation = f"error: {type(e).__name__}", "ABSTAIN", "", f"Scenario could not complete: {e}"
             results.append({"id": sid, "category": cat, "description": desc, "expected": expected, "actual": actual,
                             "status": status, "evidence": str(evidence)[:300], "explanation": explanation,
-                            "duration_ms": round((time.monotonic() - t) * 1000, 1), "label": label})
+                            "duration_ms": round((time.monotonic() - t) * 1000, 1), "label": label,
+                            "policies": _trace["policies"], "steps": _trace["steps"][:40]})
+            results[-1].update(explain(results[-1]))
     finally:
+        _trace = None
         lab.close()
     return {"seed": seed, "results": results, "summary": summarize(results, lab.citation_stats, time.monotonic() - started)}
 
@@ -544,3 +647,49 @@ def summarize(results: list[dict], citation_stats, elapsed) -> dict:
 
 def results_json(run_result: dict) -> str:
     return json.dumps(run_result, default=str)
+
+
+# --- postmortem wording ----------------------------------------------------------------------------------------
+
+_WHAT_KAVACH_DOES = {
+    "POL": "Put the policy through the six agents and gave a verdict",
+    "AUD": "Had the Auditor re-check the other agents' work against the policy text",
+    "AGT": "Checked an agent's output for evidence before trusting it",
+    "INJ": "Scanned the page for hidden instructions aimed at AI agents",
+    "WAT": "Compared the new policy version with the one you agreed to",
+    "TOK": "Checked the agent's one-time permission at the gateway before any data left",
+    "GRD": "Checked the agent's request against your rules and the policy",
+    "ISO": "Checked that one person's agent and session can't reach another person's data",
+    "EMG": "Froze every agent, then required your password again before restoring them",
+    "RES": "Failed closed when its own systems broke, so nothing was sent",
+    "CHAT": "Kept the assistant read-only and limited to your own records",
+    "MAIL": "Drafted the email to the company without sending it",
+}
+
+_ROOT_CAUSE = {
+    "INJ-06": ("The Sentinel looks for instructions addressed to agents (\"AI assistants: click…\"). This paraphrase uses none of "
+               "those words, so it got through.",
+               "Add a semantic check (an LLM reading the page) next to the word rules. Until then, unknown sites stay on Ask me."),
+    "WAT-05": ("Change detection keys on data words (share, sell, location…). \"Offers from selected brands\" adds a marketing use "
+               "without any of them, so the change was rated not material.",
+               "Teach the rules marketing phrasing, or add a semantic diff. Email alerts and the six-hourly re-review still catch it."),
+}
+
+
+def explain(r: dict) -> dict:
+    """Plain-language postmortem fields for one scenario result (also works for runs saved before tracing)."""
+    label = r.get("label") or {}
+    threat = bool(label.get("attack") or label.get("injection") or label.get("material") or label.get("expect") in ("BLOCK", "REVIEW"))
+    if r["status"] == "PASS":
+        outcome, impact = "SAFE", "Kavach did what it should. Nothing reached anyone it shouldn't have."
+    elif r["status"] == "ABSTAIN":
+        outcome, impact = "INCONCLUSIVE", "The check couldn't finish, so it isn't counted as a pass."
+    elif threat:
+        outcome, impact = "MISSED", "A threat got past this check. Other layers (your rules, Ask me, the gateway) still apply."
+    else:
+        outcome, impact = "FALSE_ALARM", "Kavach was more cautious than needed: you'd be asked about something that was fine."
+    prefix = r["id"].split("-")[0]
+    cause, follow_up = _ROOT_CAUSE.get(r["id"], (r.get("explanation") or "", ""))
+    return {"outcome": outcome, "threat": threat, "impact": impact,
+            "kavach_did": f"{_WHAT_KAVACH_DOES.get(prefix, 'Ran the check')}. Result: {r['actual']}.",
+            "root_cause": cause if r["status"] != "PASS" else "", "follow_up": follow_up if r["status"] != "PASS" else ""}

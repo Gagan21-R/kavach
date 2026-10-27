@@ -23,6 +23,7 @@ from app.engine import constitution
 from app.engine.hosts import host_within
 from app.errors import APIError, not_found
 from app.guardian import tokens
+from app.engine.scope import scope_for
 from app.models import AgentClient, AnalysisRun, ApprovalRequest, ConsentRule, PolicySource, User
 from app.models._common import new_id
 from app.vocab import Decision
@@ -100,11 +101,13 @@ def evaluate(
     policy_source_id: str,
 ) -> Evaluation:
     policy = owned_policy(db, user.id, policy_source_id)
-    rules = active_rules(db, user.id)
+    scope = scope_for(db, user.id, destination)  # the site's rule group, or the general rules
+    rules = scope.rules
     result = constitution.evaluate(
         rules,
         constitution.ActionRequest(action, destination, purpose, tuple(data_categories)),
         clock.utcnow(),
+        deny_unlisted=scope.deny_unlisted,
     )
     blocking, hard, soft = _policy_checks(db, policy, destination)
     if user.frozen:
@@ -275,6 +278,11 @@ def _pending_or_new_approval(db, user, agent, body, ev: Evaluation, now) -> Appr
     )
     db.add(approval)
     db.flush()
+    from app.notifications import notify
+
+    notify(db, user.id, "approval_needed", f"{agent.name} is asking to {body.action.replace('_', ' ')} with {body.destination}",
+           f"{', '.join(approval.data_categories)} for {body.purpose.replace('_', ' ')}. Your rules say you decide.",
+           tone="warn", section="agents", ref_id=approval.id)
     return approval
 
 

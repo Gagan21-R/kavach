@@ -46,7 +46,7 @@ def test_justification_is_not_borrowed_from_an_unrelated_clause():
 
 def test_risk_score_follows_documented_method():
     r = trial(fx.FLASHLIGHT["text"])
-    weights = {"high": 25, "medium": 12, "low": 4, "none": 0, "unknown": 3}
+    weights = {"high": 20, "medium": 8, "low": 2, "none": 0, "unknown": 4}  # cc-risk-v2
     expected = min(100, sum(weights[c["risk_level"]] for c in r["judge"]["category_map"]))
     assert r["judge"]["risk_score"]["value"] == expected
     assert all(c["basis"] in ("heuristic", "not_available") for c in r["judge"]["confidence"])

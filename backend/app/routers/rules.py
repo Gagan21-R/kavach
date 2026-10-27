@@ -134,14 +134,16 @@ def rule_history(rule_id: str, ctx: UserContext = Depends(current_user), db: Ses
 
 @router.post("/check")
 def check_action(body: ActionIn, ctx: UserContext = Depends(current_user), db: Session = Depends(get_db)):
-    """Dry run: what would the user's rules alone say about this action? Issues nothing."""
-    rules = db.execute(
-        select(ConsentRule).where(ConsentRule.user_id == ctx.user.id, ConsentRule.active.is_(True))
-    ).scalars()
+    """What would the user's rules alone say about this action (the destination's rule group, or the general
+    rules)? Issues nothing. Used by agents and tests; the dashboard no longer shows it."""
+    from app.engine.scope import scope_for
+
+    scope = scope_for(db, ctx.user.id, body.destination)
     result = constitution.evaluate(
-        list(rules),
+        scope.rules,
         constitution.ActionRequest(body.action, body.destination, body.purpose, tuple(body.data_categories)),
         clock.utcnow(),
+        deny_unlisted=scope.deny_unlisted,
     )
     return {
         "decision": result.decision,

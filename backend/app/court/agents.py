@@ -48,11 +48,18 @@ SAFER = {
     PC.ADVERTISING: "Turn off ad personalisation in the app and your device settings.",
     PC.AI_TRAINING: "Look for an AI-training opt-out, or avoid uploading private content.",
 }
-LEVEL_WEIGHTS = {"high": 25, "medium": 12, "low": 4, "none": 0, "unknown": 3}
-RISK_METHOD = "cc-risk-v1: sum of per-category weights (high 25, medium 12, low 4, unknown 3, none 0), capped at 100"
+LEVEL_WEIGHTS = {"high": 20, "medium": 8, "low": 2, "none": 0, "unknown": 4}
+RISK_METHOD = "cc-risk-v2: sum of per-category weights (high 20, medium 8, low 2, unknown 4, none 0), capped at 100"
 _DOWN = {"high": "medium", "medium": "low", "low": "none", "none": "none"}
 _SEV_LEVEL = {"CRITICAL": "high", "HIGH": "high", "MEDIUM": "medium", "LOW": "low"}
 _RANK = {"none": 0, "unknown": 1, "low": 2, "medium": 3, "high": 4}
+# Plain-language verb phrases for headlines ("FlashLight wants to use your contacts").
+WANTS = {
+    PC.LOCATION: "use your location", PC.CONTACTS: "use your contacts", PC.BIOMETRICS: "use your biometric data",
+    PC.THIRD_PARTY_SHARING: "share your data with other companies", PC.RETENTION: "keep your data without a clear limit",
+    PC.DELETION: "limit deleting your data", PC.ADVERTISING: "use your data for advertising",
+    PC.AI_TRAINING: "use your data to train AI",
+}
 
 
 def _meta(agent: str, run_id: str, policy_hash: str) -> dict:
@@ -128,6 +135,8 @@ def prosecutor(clauses: list[Clause], snapshot_id: str, run_id: str, policy_hash
     for c in clauses:
         if lx.injection_hits(c.text):
             continue  # instructions to agents are the Sentinel's matter, not a data practice
+        if lx.not_a_practice(c.text):
+            continue  # a heading, or a rule for the user ("you may not sell the Service")
         text = c.text
         if lx.is_protective(text):
             text = lx.residual_practice(text)  # "We do not sell your data" protects the user
@@ -136,9 +145,9 @@ def prosecutor(clauses: list[Clause], snapshot_id: str, run_id: str, policy_hash
         for cat in sorted(lx.categories_of(text), key=lambda x: x.value):
             if cat == PC.DELETION and not _DELETION_LIMIT.search(text):
                 continue  # offering deletion is good for the user
-            if cat == PC.RETENTION and lx.NUMBERS.search(text) and not lx.HIGH_RISK.search(text):
+            if cat == PC.RETENTION and lx.NUMBERS.search(text) and not lx.high_risk(text):
                 continue  # a specific retention period is not a charge
-            if lx.HIGH_RISK.search(text) or cat in (PC.BIOMETRICS, PC.CONTACTS):
+            if lx.high_risk(text) or (cat in (PC.BIOMETRICS, PC.CONTACTS) and lx.ACTION_VERBS.search(text)):
                 severity = "HIGH"
             elif lx.HEDGES.search(text) or cat in (PC.THIRD_PARTY_SHARING, PC.ADVERTISING, PC.AI_TRAINING, PC.LOCATION, PC.RETENTION):
                 severity = "MEDIUM"
@@ -177,6 +186,8 @@ def defense(charges: list[dict], clauses: list[Clause], snapshot_id: str, run_id
         specific = next((c for c in neighbourhood if lx.SPECIFIC_PURPOSE.search(c.text)), None)
         vague = next((c for c in neighbourhood if lx.VAGUE_PURPOSE.search(c.text)), None)
         numbers = next((c for c in neighbourhood if lx.NUMBERS.search(c.text)), None)
+        control = next((c for c in neighbourhood if lx.USER_CONTROL.search(c.text)), None)
+        deidentified = next((c for c in neighbourhood if lx.DEIDENTIFIED.search(c.text)), None)
         if specific is not None and not (vague is specific and not lx.SPECIFIC_PURPOSE.search(specific.text)):
             m = lx.SPECIFIC_PURPOSE.search(specific.text)
             position = "partially_justified" if ch["severity"] == "HIGH" else "justified"
@@ -184,6 +195,22 @@ def defense(charges: list[dict], clauses: list[Clause], snapshot_id: str, run_id
                 "finding_id": ch["id"], "position": position, "status": "DIRECT", "citations": [_span(snapshot_id, specific)],
                 "argument": f"The policy states a specific purpose: “{m.group(0)}”."
                 + (" The wording is still high-risk, so this only partly answers the charge." if position == "partially_justified" else ""),
+            })
+        elif control is not None:
+            m = lx.USER_CONTROL.search(control.text)
+            position = "partially_justified" if ch["severity"] == "HIGH" else "justified"
+            responses.append({
+                "finding_id": ch["id"], "position": position, "status": "DIRECT", "citations": [_span(snapshot_id, control)],
+                "argument": f"The policy gives you a choice: “{m.group(0)}”."
+                + (" The practice is still high-risk, so this only partly answers the charge." if position == "partially_justified" else ""),
+            })
+        elif deidentified is not None:
+            m = lx.DEIDENTIFIED.search(deidentified.text)
+            position = "partially_justified" if ch["severity"] == "HIGH" else "justified"
+            responses.append({
+                "finding_id": ch["id"], "position": position, "status": "DIRECT", "citations": [_span(snapshot_id, deidentified)],
+                "argument": f"The policy says the data is “{m.group(0)}”, which lowers the risk to you."
+                + (" It is still a high-risk use, so this only partly answers the charge." if position == "partially_justified" else ""),
             })
         elif ch["category"] in ("retention", "deletion") and numbers is not None:
             responses.append({
@@ -250,22 +277,24 @@ def judge(canonical: str, clauses: list[Clause], charges: list[dict], responses:
 
     levels: dict[str, str] = {}
     per_cat: dict[str, list[str]] = {}
-    agreements, disagreements = [], []
+    unexcused: dict[str, list[str]] = {}
+    disagreements = []
     for ch in charges:
         r = resp.get(ch["id"])
         level = _SEV_LEVEL[ch["severity"]]
         position = r["position"] if r else "insufficient_evidence"
         if position == "justified" and def_valid.get(ch["id"]):
             level = _DOWN[level]
+        elif position == "partially_justified" and def_valid.get(ch["id"]) and level == "high":
+            level = "medium"  # a stated purpose or a real choice for the user softens, but doesn't clear, the finding
         if not pros_valid.get(ch["id"], False):
             level = "unknown"
         cat = ch["category"]
         per_cat.setdefault(cat, []).append(ch["id"])
         if _RANK[level] > _RANK[levels.get(cat, "none")]:
             levels[cat] = level
-        label = LABELS[PC(cat)]
         if position in ("not_justified", "insufficient_evidence"):
-            agreements.append(f"{ch['id']}: the Defense could not justify {label}, so it is flagged as excessive.")
+            unexcused.setdefault(cat, []).append(ch["id"])
         else:
             resolved = position == "justified" and def_valid.get(ch["id"], False) and ch["severity"] != "HIGH"
             disagreements.append({
@@ -277,6 +306,11 @@ def judge(canonical: str, clauses: list[Clause], charges: list[dict], responses:
                 else "The purpose is stated but the practice is high-risk; your judgement is needed.",
             })
 
+    agreements = [
+        f"{LABELS[PC(cat)]}: the Defense could not justify {len(ids)} finding(s) ({', '.join(ids[:5])}{', …' if len(ids) > 5 else ''})."
+        for cat, ids in unexcused.items()
+    ]
+    disagreements = sorted(disagreements, key=lambda d: d["resolved"])[:100]  # unresolved first
     category_map, missing = [], []
     for cat in PC:
         if cat.value in levels:
@@ -289,15 +323,23 @@ def judge(canonical: str, clauses: list[Clause], charges: list[dict], responses:
             missing.append("how long data is kept" if cat == PC.RETENTION else "how to delete your data")
         else:
             lvl, expl = "none", "Not mentioned in the policy."
-        category_map.append({"category": cat.value, "risk_level": lvl, "finding_ids": per_cat.get(cat.value, []), "explanation": expl})
+        category_map.append({"category": cat.value, "risk_level": lvl, "finding_ids": per_cat.get(cat.value, [])[:100], "explanation": expl})
 
     score, inputs = score_from_map(category_map)
     unresolved = [d for d in disagreements if not d["resolved"]]
     highs = [c for c in category_map if c["risk_level"] == "high"]
     injected = sentinel_is_suspicious(sentinel_out)
-    if injected or highs:
+
+    def unexcused(cat):
+        return [ch for ch in charges if ch["category"] == cat and _SEV_LEVEL[ch["severity"]] == "high"
+                and resp.get(ch["id"], {}).get("position") in ("not_justified", "insufficient_evidence", None)]
+
+    # Not recommended: hidden instructions, several high-risk practices, or selling your data. One high-risk
+    # practice on its own (common in large services' policies) needs the user's judgement instead.
+    sells = any(lx.SALE_OF_DATA.search(ch["citations"][0]["quote"]) for ch in unexcused(PC.THIRD_PARTY_SHARING.value) if ch["citations"])
+    if injected or len(highs) >= 2 or sells:
         rec = "BLOCK"
-    elif unresolved or missing or score >= 25:
+    elif highs or unresolved or missing or score >= 25:
         rec = "REVIEW"
     else:
         rec = "ALLOW"
@@ -306,16 +348,15 @@ def judge(canonical: str, clauses: list[Clause], charges: list[dict], responses:
     if injected:
         headline = f"The {name} page contains hidden instructions aimed at AI agents. Do not let an agent accept it."
     elif highs:
-        def unexcused(cat):
-            return [ch for ch in charges if ch["category"] == cat and _SEV_LEVEL[ch["severity"]] == "high"
-                    and resp.get(ch["id"], {}).get("position") in ("not_justified", "insufficient_evidence", None)]
         # Lead with what the Defense could not justify; ties go to the most sensitive categories.
         priority = [PC.CONTACTS, PC.BIOMETRICS, PC.AI_TRAINING, PC.THIRD_PARTY_SHARING, PC.LOCATION, PC.ADVERTISING, PC.RETENTION, PC.DELETION]
         high_cats = [PC(h["category"]) for h in highs]
         ordered = sorted(high_cats, key=lambda c: (not unexcused(c.value), priority.index(c)))
         worst = ordered[0]
-        if unexcused(worst.value):
-            headline = f"{name} wants to use your {LABELS[worst]}. The Defense could not justify it. Excessive."
+        if unexcused(worst.value) and rec == "BLOCK":
+            headline = f"{name} wants to {WANTS[worst]}. The Defense could not justify it. Excessive."
+        elif unexcused(worst.value):
+            headline = f"{name} wants to {WANTS[worst]}, and the Defense could not justify it. Your judgement is needed."
         else:
             headline = f"{name}: {LABELS[worst]} is high-risk and the Defense offered only a partial justification."
     elif rec == "REVIEW":
@@ -388,13 +429,15 @@ def auditor(canonical: str, clauses: list[Clause], charges: list[dict], response
             charged.setdefault(s["clause_id"], set()).add(ch["category"])
     always_charged = {PC.THIRD_PARTY_SHARING, PC.AI_TRAINING, PC.BIOMETRICS, PC.CONTACTS, PC.ADVERTISING}
     for c in clauses:
-        if lx.injection_hits(c.text):
+        if lx.injection_hits(c.text) or lx.not_a_practice(c.text):
             continue
         residual = lx.residual_practice(c.text) if lx.is_protective(c.text) else c.text
         if residual is None:
             continue
         ev = [{"snapshot_id": "audit", "clause_id": c.id, "start": c.start, "end": c.end, "quote": c.text[:2000]}]
-        if lx.HIGH_RISK.search(residual) and c.id not in cited:
+        # High-risk wording only needs a finding when the clause is about a data practice the court can name;
+        # "subscriptions renew indefinitely" or "you forever waive a claim" are not privacy practices.
+        if lx.high_risk(residual) and c.id not in cited and lx.categories_of(residual):
             issues.append({"kind": "omitted_risk", "severity": "HIGH", "finding_id": None, "evidence": ev,
                            "explanation": f"Clause {c.id} uses high-risk wording but no finding addresses it."})
             continue

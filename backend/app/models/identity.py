@@ -18,6 +18,10 @@ class User(Base):
     # Emergency Stop: while true, no protected action can be authorized or executed for this user.
     frozen: Mapped[bool] = mapped_column(Boolean, default=False)
     active_incident_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Set once the user has finished (or skipped) the first-run preferences.
+    onboarded_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    # Private part of the user's forwarding address for "we're updating our terms" emails.
+    inbox_token: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
 
 

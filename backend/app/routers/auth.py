@@ -18,7 +18,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _user_out(u: User) -> UserOut:
-    return UserOut(id=u.id, email=u.email, constitution_version=u.constitution_version)
+    return UserOut(id=u.id, email=u.email, constitution_version=u.constitution_version, onboarded=u.onboarded_at is not None)
 
 
 @router.post("/register", status_code=201, response_model=UserOut, dependencies=[Depends(auth_limit)])

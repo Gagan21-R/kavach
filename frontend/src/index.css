@@ -1,17 +1,154 @@
 @import "tailwindcss";
 
+/* ------------------------------------------------------------------
+   Kavach theme: neo-brutalist paper. Cream page, black ink, hard
+   shadows, square corners, a yellow highlighter and a blue accent.
+   Type: Space Grotesk for reading and headlines, Space Mono for labels,
+   chips and numbers.
+   Token names are shared by every screen, so changing them here restyles
+   the whole product.
+   ------------------------------------------------------------------ */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Source Serif 4", ui-serif, Georgia, serif;
-  --color-ink: #0f172a;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, Menlo, monospace;
+
+  --color-bg: #f2eee3;          /* paper */
+  --color-surface: #fdfcf7;     /* card */
+  --color-raised: #ebe6d8;
+  --color-line: #d8d1bf;        /* quiet dividers */
+  --color-line-strong: #0b0b0b; /* ink */
+  --color-fg: #0b0b0b;
+  --color-fg2: #3b3a36;
+  --color-muted: #6b675e;
+  --color-dim: #9a958a;
+  --color-paper: #ffd84d;       /* yellow: primary actions and highlights */
+  --color-yellow: #ffd84d;
+  --color-gold: #2b3af0;        /* blue accent for labels and links */
+  --color-gold-deep: #1d28b8;
+  --color-sky: #dfe4ff;          /* light blue for tags */
+  --color-sunlit: #fff3b8;
+  --color-earth: #2b3af0;
+  --color-mint: #138a4b;        /* pass / fine */
+  --color-sand: #b8650a;        /* hold / needs review */
+  --color-ember: #d22f2f;       /* fail / not recommended */
 }
 
 html, body, #root { height: 100%; }
-body { @apply bg-slate-50 text-slate-800 antialiased; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; background: var(--color-bg); }
+body {
+  overflow-x: clip;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+::selection { background: var(--color-yellow); color: var(--color-fg); }
+:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 3px; }
 
-@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.rise { animation: rise .35s ease-out both; }
-@media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
+/* The page itself: plain paper with a faint dotted grid. */
+.dotgrid {
+  background-color: var(--color-bg);
+  background-image: radial-gradient(circle at 1px 1px, rgb(11 11 11 / 0.07) 1px, transparent 0);
+  background-size: 22px 22px;
+}
 
+/* In a layer, so utilities like text-fg or border-dashed can override these. */
+@layer components {
+/* Cards: ink border and a hard shadow. */
+.card {
+  background: var(--color-surface);
+  border: 2px solid var(--color-line-strong);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--color-line-strong);
+}
+.card-flat { background: var(--color-surface); border: 2px solid var(--color-line-strong); }
+.ink-block { background: #0b0b0b; color: #fdfcf7; border: 2px solid #0b0b0b; box-shadow: 4px 4px 0 var(--color-yellow); }
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.h-page { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.9rem, 4vw, 3.4rem); line-height: 1.02; letter-spacing: -0.02em; text-transform: uppercase; color: var(--color-fg); }
+.h-display { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; line-height: 1.02; text-transform: uppercase; color: var(--color-fg); }
+.num { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.wordmark { font-family: var(--font-display); font-weight: 700; letter-spacing: 0.18em; }
+/* The highlighter: yellow marker behind black words. */
+.gold-text, .marker { background: var(--color-yellow); color: var(--color-fg); padding: 0 0.12em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+
+/* HUD corner brackets (currentColor), kept for small framed strips. */
+.brackets {
+  background:
+    linear-gradient(currentColor, currentColor) top left / 14px 2px,
+    linear-gradient(currentColor, currentColor) top left / 2px 14px,
+    linear-gradient(currentColor, currentColor) top right / 14px 2px,
+    linear-gradient(currentColor, currentColor) top right / 2px 14px,
+    linear-gradient(currentColor, currentColor) bottom left / 14px 2px,
+    linear-gradient(currentColor, currentColor) bottom left / 2px 14px,
+    linear-gradient(currentColor, currentColor) bottom right / 14px 2px,
+    linear-gradient(currentColor, currentColor) bottom right / 2px 14px;
+  background-repeat: no-repeat;
+}
+}
+
+/* Running ticker under the header. */
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.ticker-track { display: inline-flex; animation: ticker 40s linear infinite; }
+
+/* Reveal on scroll (see useReveals). */
+[data-reveal] { opacity: 0; transform: translate3d(0, 18px, 0); transition: opacity 0.6s cubic-bezier(0.2, 0.7, 0.1, 1), transform 0.6s cubic-bezier(0.2, 0.7, 0.1, 1); }
+[data-reveal].is-in { opacity: 1; transform: none; }
+
+/* Motion: quiet and purposeful */
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes drawer { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes caret { 50% { opacity: 0; } }
+@keyframes glow { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
+.rise { animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.1, 1) both; }
+.fade { animation: fade 0.3s ease-out both; }
+.live-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
+.drawer-in { animation: drawer 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.caret::after { content: "_"; animation: caret 1s steps(1) infinite; margin-left: 2px; }
+.glow { animation: glow 5s ease-in-out infinite; }
+.stagger > * { animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.1, 1) both; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(6) { animation-delay: 300ms; }
+.stagger > *:nth-child(n + 7) { animation-delay: 360ms; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .rise, .fade, .drawer-in, .stagger > *, .live-dot, .glow, .ticker-track { animation: none; }
+  [data-reveal] { transform: none; transition: opacity 0.3s; }
+}
+
+.scroll-thin { scrollbar-width: thin; scrollbar-color: #0b0b0b transparent; }
 .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
-.scroll-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: #0b0b0b; }
+
+input, textarea, select { color-scheme: light; }
+
+/* 1px dividers between grid cells: the gap shows this colour through */
+.hairgrid { background: var(--color-line-strong); }
+
+/* Long words or quotes must never widen a grid column past the screen. */
+.grid > * { min-width: 0; }
+
+/* Printing a postmortem report: only the open report, at full length. */
+@media print {
+  body > #root { display: none; }
+  body > div.fixed { position: static; background: none; padding: 0; display: block; }
+  body > div.fixed > div { max-height: none; overflow: visible; box-shadow: none; max-width: none; }
+  .no-print, body > div.fixed button[aria-label="Close"] { display: none; }
+}

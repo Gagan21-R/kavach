@@ -153,3 +153,73 @@ def granted(make_actor):
         return user, agent, agent_id, policy_id, r.json()["token"], r.json()["token_info"]
 
     return _granted
+
+
+# --- test history: every run is recorded for the dashboard's Test history (see app/testhistory.py) ----------------
+
+_run = {"tests": [], "docs": {}}
+
+
+def pytest_sessionstart(session):
+    import time
+
+    _run.update(start=time.time(), tests=[], docs={})
+
+
+def pytest_collection_modifyitems(items):
+    for item in items:
+        doc = getattr(getattr(item, "obj", None), "__doc__", None)
+        _run["docs"][item.nodeid] = " ".join(doc.split()) if doc else ""
+
+
+def pytest_runtest_logreport(report):
+    # One entry per test: the call phase, or setup/teardown when that is what failed or skipped.
+    if report.when != "call" and report.outcome == "passed":
+        return
+    if report.when != "call" and any(t["id"] == report.nodeid for t in _run["tests"]):
+        return
+    from app.testhistory import area_of, humanize
+
+    outcome = report.outcome if report.when == "call" or report.outcome == "skipped" else "error"
+    _run["tests"].append({"id": report.nodeid, "area": area_of(report.nodeid), "name": humanize(report.nodeid.split("::")[-1]),
+                          "doc": _run["docs"].get(report.nodeid, ""), "outcome": outcome, "duration_s": round(report.duration, 3),
+                          "message": report.longreprtext[-2500:] if report.failed else ""})
+
+
+def pytest_sessionfinish(session, exitstatus):
+    import json
+    import os
+    import secrets
+    import subprocess
+    import sys
+    import time
+    from datetime import datetime, timezone
+
+    from app.testhistory import history_dir
+
+    if session.config.option.collectonly or os.environ.get("KAVACH_NO_TEST_HISTORY") or not _run["tests"]:
+        return
+
+    def git(*args):
+        try:
+            return subprocess.run(["git", *args], capture_output=True, text=True, timeout=5, cwd=session.config.rootpath).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return ""
+
+    started = datetime.fromtimestamp(_run["start"], tz=timezone.utc)
+    tests = _run["tests"]
+    totals = {k: sum(t["outcome"] == k for t in tests) for k in ("passed", "failed", "error", "skipped")}
+    record = {"id": f"{started:%Y%m%d-%H%M%S}-{secrets.token_hex(2)}", "kind": "pytest", "started_at": started.isoformat(),
+              "duration_s": round(time.time() - _run["start"], 2), "exit_status": int(exitstatus),
+              "commit": git("rev-parse", "--short", "HEAD") or None, "dirty": bool(git("status", "--porcelain")),
+              "python": sys.version.split()[0], "args": session.config.invocation_params.args[:20],
+              "totals": {"total": len(tests), **totals}, "tests": tests}
+    d = history_dir()
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{record['id']}.json").write_text(json.dumps(record, indent=1), encoding="utf-8")
+        with open(d.parent / "history.log", "a", encoding="utf-8") as log:
+            log.write(f"{started:%Y-%m-%d %H:%M:%S} UTC  {totals['passed']}/{len(tests)} passed  {totals['failed'] + totals['error']} failed  "
+                      f"{record['duration_s']}s  commit {record['commit'] or '-'}{'+changes' if record['dirty'] else ''}  {record['id']}\n")
+    except OSError as e:  # never fail a test run because the history couldn't be written
+        print(f"\n[test history] not saved: {e}")
