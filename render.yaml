@@ -1,5 +1,9 @@
-# Render Blueprint: the dashboard and API on one web service, a Postgres database, and the Watchman cron job.
+# Render Blueprint (free plans only): the dashboard and API on one web service, and a Postgres database.
 # Deploy: Render dashboard > New > Blueprint > pick this repository.
+#
+# Watchman runs inside the web service every 6 hours while it is awake (free services sleep after 15 idle
+# minutes). For checks that run on schedule regardless, add a payment card and the two paid services in
+# README "Scaling Watchman": a cron job and the kavach-watchman-flow Render Workflow (app/watchman/workflow.py).
 services:
   - type: web
     name: kavach
@@ -21,59 +25,10 @@ services:
         value: "true"
       - key: CC_CORS_ORIGINS
         value: ""
-      # Free web services sleep when idle, so the cron job below runs Watchman instead.
       - key: CC_WATCH_SCHEDULER_ENABLED
-        value: "false"
+        value: "true"
       - key: CC_FETCH_RENDER_ENABLED
         value: "false"
-      - key: CC_DATABASE_URL
-        fromDatabase:
-          name: kavach-db
-          property: connectionString
-
-  # Every 6 hours: starts the Watchman workflow below, which checks all policies in parallel. If the workflow
-  # can't be started (no RENDER_API_KEY, Render API down), it checks them itself. Starter: about $1 a month.
-  - type: cron
-    name: kavach-watchman
-    runtime: python
-    plan: starter
-    region: singapore
-    schedule: "0 */6 * * *"
-    buildCommand: pip install -r backend/requirements.txt
-    startCommand: cd backend && python -m app.watchman.cron
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.13.7
-      - key: CC_ENV
-        value: production
-      - key: CC_FETCH_RENDER_ENABLED
-        value: "false"
-      - key: CC_WATCHMAN_WORKFLOW
-        value: kavach-watchman-flow/check_all
-      - key: RENDER_API_KEY  # Account Settings > API Keys; entered in the dashboard, never stored in the repo
-        sync: false
-      - key: CC_DATABASE_URL
-        fromDatabase:
-          name: kavach-db
-          property: connectionString
-
-  # Render Workflows: check_all fans out one check_policy task per policy (20 at a time, each retried twice),
-  # each on its own compute. Billed per second of task time only.
-  - type: workflow
-    name: kavach-watchman-flow
-    runtime: python
-    region: singapore
-    buildCommand: pip install -r backend/requirements.txt
-    startCommand: cd backend && python -m app.watchman.workflow
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.13.7
-      - key: CC_ENV
-        value: production
-      - key: CC_FETCH_RENDER_ENABLED
-        value: "false"
-      - key: CC_WATCHMAN_PARALLEL
-        value: "20"
       - key: CC_DATABASE_URL
         fromDatabase:
           name: kavach-db

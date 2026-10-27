@@ -75,21 +75,53 @@ cd backend
 
 ## Deploy on Render
 
-`render.yaml` is a Render Blueprint with three parts, all in the Singapore region:
+`render.yaml` is a Render Blueprint on free plans only (no payment card needed), in the Singapore region:
 
 | Part | Plan | What it does |
 |---|---|---|
-| `kavach` web service | Free | Builds the dashboard, runs the migrations, serves the API under `/api` and the dashboard on one origin |
+| `kavach` web service | Free | Builds the dashboard, runs the migrations, serves the API under `/api` and the dashboard on one origin, and runs Watchman every 6 hours while awake |
 | `kavach-db` PostgreSQL | Free | The database (Render deletes free databases after 30 days; upgrade to Basic to keep it) |
-| `kavach-watchman` cron job | Starter (about $1 a month) | Every 6 hours, starts the Watchman workflow (free web services sleep when idle, so they can't) |
-| `kavach-watchman-flow` Render Workflow | Pay per second of task time | `check_all` fans out one `check_policy` task per policy, 20 in parallel, each retried twice on failure |
 
 1. Push this repository to GitHub.
-2. In Render: **New > Blueprint**, pick the repository. When asked for `RENDER_API_KEY`, paste a key from **Account Settings > API Keys** (the cron job uses it to start the workflow). Click **Apply**.
+2. In Render: **New > Blueprint**, pick the repository and click **Apply**.
 3. Open the `kavach` service's URL once the deploy is live and create an account.
 
-Watchman scales with the number of tracked policies: each policy is checked on its own compute, so 10,000 policies take about as long as 20. Without the API key, or if Render's API can't be reached, the cron job checks every policy itself, one by one, so checks never stop. Locally the same code runs in-process (`app.watchman.scheduler`).
-
 The free web service sleeps after 15 minutes without visits; the first visit after that takes about a minute. The migrations and the full app (sign-up, demo data, Red Team, postmortems) have been checked against PostgreSQL 17 with production settings.
+
+### Scaling Watchman (paid, needs a card on file)
+
+Free services sleep, so Watchman only runs while someone is using the site. For checks every 6 hours no matter what, add these two services to `render.yaml` and set `CC_WATCH_SCHEDULER_ENABLED` to `"false"` on the web service:
+
+```yaml
+  - type: cron                      # about $1 a month
+    name: kavach-watchman
+    runtime: python
+    plan: starter
+    region: singapore
+    schedule: "0 */6 * * *"
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && python -m app.watchman.cron
+    envVars:
+      - { key: PYTHON_VERSION, value: 3.13.7 }
+      - { key: CC_ENV, value: production }
+      - { key: CC_WATCHMAN_WORKFLOW, value: kavach-watchman-flow/check_all }
+      - { key: RENDER_API_KEY, sync: false }   # Account Settings > API Keys
+      - key: CC_DATABASE_URL
+        fromDatabase: { name: kavach-db, property: connectionString }
+
+  - type: workflow                  # Render Workflows, billed per second of task time
+    name: kavach-watchman-flow
+    runtime: python
+    region: singapore
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && python -m app.watchman.workflow
+    envVars:
+      - { key: PYTHON_VERSION, value: 3.13.7 }
+      - { key: CC_ENV, value: production }
+      - key: CC_DATABASE_URL
+        fromDatabase: { name: kavach-db, property: connectionString }
+```
+
+The cron job starts the workflow's `check_all` task, which fans out one `check_policy` task per policy, 20 in parallel, each retried twice, so 10,000 policies take about as long as 20. Without `RENDER_API_KEY`, or if Render's API can't be reached, the cron job checks every policy itself.
 
 To use the browser extension with the live site, set its **Server** option to the Render URL.
