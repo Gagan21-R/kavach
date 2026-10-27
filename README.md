@@ -17,7 +17,7 @@ A multi-agent system that reads privacy policies, argues over them, enforces eac
   3. Install the [browser extension](#browser-extension), set its **Kavach address** to the live URL, and open the dashboard once while signed in: the extension connects itself.
   4. Open a terms page such as https://openai.com/policies/terms-of-use/ or https://www.spotify.com/us/legal/end-user-agreement/. Kavach's six agents review the whole site and show a risk score, the clauses that clash with your rules, and **Track this website**.
   5. Back on the dashboard, **Websites** lists the site and Watchman keeps checking it for changes. **Rules & agents > More tools** has the Courtroom, Test history (Red Team postmortems) and the Audit log.
-- **Run it yourself:** [Run locally](#run-locally-windows-python-313-node-20) (about 5 minutes) or [Deploy on Render](#deploy-on-render) (one Blueprint, free plans).
+- **Run it yourself:** [Run locally](#run-locally) (about 5 minutes) or [Deploy on Render](#deploy-on-render) (one Blueprint, free plans).
 
 ## What works today (verified in tests and in the browser)
 
@@ -43,21 +43,54 @@ A multi-agent system that reads privacy policies, argues over them, enforces eac
 
 All agents run in **offline mode**: deterministic, rule-based, no LLM calls. The rules were calibrated on 36 real privacy policies and terms: most big-service policies now come out as *Needs your review* with a spread of scores, and *Not recommended* is kept for hidden instructions, selling data or several high-risk practices. An LLM-backed agent can replace any of them behind the same validated contracts once API keys are provided.
 
-## Run locally (Windows, Python 3.13, Node 20+)
+## Run locally
+
+### Requirements
+
+| Need | Version | Notes |
+|---|---|---|
+| Python | 3.11 or newer (tested on 3.13) | [python.org](https://www.python.org/downloads/); on Windows tick "Add python.exe to PATH" |
+| Node.js | 20 or newer (tested on 22 and 24) | [nodejs.org](https://nodejs.org/); only needed to build the dashboard |
+| A Chromium browser | Chrome, Edge or Brave | For the extension |
+| Disk / RAM | About 400 MB / 512 MB | No GPU, no API keys, no paid services |
+
+Python packages are pinned in [`backend/requirements.txt`](backend/requirements.txt) (runtime), [`requirements-dev.txt`](backend/requirements-dev.txt) (adds pytest) and [`requirements-optional.txt`](backend/requirements-optional.txt) (a headless browser for JavaScript-only policy pages). Dashboard packages are pinned in [`frontend/package-lock.json`](frontend/package-lock.json). Every setting is listed with its default in [`backend/.env.example`](backend/.env.example); none is required to run locally.
+
+### Setup (one command)
+
+Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1
+```
+
+macOS / Linux:
+
+```bash
+bash scripts/setup.sh
+bash scripts/start.sh
+```
+
+Setup creates `backend/.venv`, installs the packages, copies `.env.example` to `backend/.env`, creates the SQLite database `backend/consent_court.db` and builds the dashboard. Start serves everything at http://localhost:8000.
+
+<details><summary>Manual steps (what the scripts do)</summary>
 
 ```bash
 cd backend
-py -3.13 -m venv .venv
-.venv/Scripts/python.exe -m pip install -r requirements.txt
-.venv/Scripts/python.exe -m pip install playwright      # optional: JavaScript-only policy pages
-.venv/Scripts/python.exe -m playwright install chromium
-.venv/Scripts/alembic.exe upgrade head
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements-dev.txt   # macOS / Linux: .venv/bin/python
+cp .env.example .env
+.venv/Scripts/python -m alembic upgrade head
 cd ../frontend
-npm install
+npm ci
 npm run build
 cd ..
-backend/.venv/Scripts/python.exe -m uvicorn app.serve:app --app-dir backend --port 8000
+backend/.venv/Scripts/python -m uvicorn app.serve:app --app-dir backend --port 8000
 ```
+
+Optional, for privacy pages that only appear with JavaScript: `pip install -r requirements-optional.txt` then `python -m playwright install chromium`.
+</details>
 
 Open http://localhost:8000, create an account and answer the three first-run questions. The dashboard has three tabs: **Home** (overview), **Websites** (type any site for one review, plus Watchman and the monitoring inbox) and **Rules & agents** (your rules and groups, AI agents with the Emergency Stop, and More tools: Test history, a compact Courtroom and the Audit log). The Trap, data-flow and Red Team checks still run on the server; they no longer have their own screens. Click **Load demo data** on the Overview for the fictional demo. API docs: http://localhost:8000/api/docs.
 
@@ -82,7 +115,7 @@ For frontend development with hot reload, run the API with `uvicorn app.main:app
 
 ```bash
 cd backend
-.venv/Scripts/python.exe -m pytest
+.venv/Scripts/python -m pytest      # after setup; macOS / Linux: .venv/bin/python
 ```
 
 186 tests: engine, contracts, auth, tenant isolation, tokens, gateway bypass and fail-closed behaviour, court pipeline, auditor, Watchman, data flow, Emergency Stop, chatbot, drafts, Red Team reproducibility, migrations, cron, production app, policy acquisition and fallbacks, discovery, preferences, combined site reviews, automatic re-checks with ETag / Last-Modified, the extension API and automatic connection, the monitoring inbox, rule groups, the improved Emergency Stop and the scoring calibration. No test touches the network.

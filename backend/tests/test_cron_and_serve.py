@@ -23,7 +23,14 @@ def test_cron_checks_url_policies_and_skips_frozen(make_actor, Session, monkeypa
 def test_postgres_urls_are_normalized():
     assert app_db.normalize_url("postgres://u:p@h/db") == "postgresql+psycopg://u:p@h/db"
     assert app_db.normalize_url("postgresql://u:p@h/db") == "postgresql+psycopg://u:p@h/db"
-    assert app_db.normalize_url("sqlite:///x.db") == "sqlite:///x.db"
+    # Relative SQLite paths mean backend/, whichever folder the command runs from; absolute and in-memory stay as given.
+    backend = app_db.BACKEND_DIR.as_posix()
+    assert app_db.normalize_url("sqlite:///./x.db") == f"sqlite:///{backend}/x.db"
+    assert app_db.normalize_url("sqlite:///x.db") == f"sqlite:///{backend}/x.db"
+    absolute = (app_db.BACKEND_DIR / "y.db").as_posix()
+    assert app_db.normalize_url(f"sqlite:///{absolute}") == f"sqlite:///{absolute}"
+    assert app_db.normalize_url("sqlite://") == "sqlite://"
+    assert app_db.normalize_url("sqlite:///:memory:") == "sqlite:///:memory:"
 
 
 def test_production_app_serves_api_under_api_prefix_with_security_headers(app, monkeypatch):

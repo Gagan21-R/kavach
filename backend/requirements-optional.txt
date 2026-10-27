@@ -1,0 +1,4 @@
+# Optional: a headless browser for privacy pages that only show their text with JavaScript.
+# After installing: python -m playwright install chromium
+# Without it Kavach skips that step and tries Open Terms Archive and the Internet Archive instead.
+playwright==1.64.1

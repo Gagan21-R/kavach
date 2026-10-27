@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Iterator
 
 from sqlalchemy import DateTime, create_engine, event
@@ -6,7 +7,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.types import TypeDecorator
 
-from app.config import get_settings
+from app.config import BACKEND_DIR, get_settings
 
 
 class UTCDateTime(TypeDecorator):
@@ -35,10 +36,14 @@ class Base(DeclarativeBase):
 
 
 def normalize_url(url: str) -> str:
-    """Render and Heroku hand out postgres:// URLs; SQLAlchemy needs the psycopg 3 driver named explicitly."""
+    """Render and Heroku hand out postgres:// URLs; SQLAlchemy needs the psycopg 3 driver named explicitly.
+    A relative SQLite path means backend/, so the server, Alembic and scripts share one file from any folder."""
     for prefix in ("postgres://", "postgresql://"):
         if url.startswith(prefix):
             return "postgresql+psycopg://" + url[len(prefix):]
+    path = url.removeprefix("sqlite:///") if url.startswith("sqlite:///") else None
+    if path and path != ":memory:" and not Path(path).is_absolute():
+        return "sqlite:///" + (BACKEND_DIR / path).resolve().as_posix()
     return url
 
 

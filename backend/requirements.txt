@@ -1,3 +1,5 @@
+# Runtime dependencies (what Render installs). Python 3.13.
+# Development and tests: pip install -r requirements-dev.txt
 fastapi==0.162.0
 uvicorn[standard]==0.54.0
 SQLAlchemy==2.1.6
@@ -7,6 +9,6 @@ argon2-cffi==25.1.0
 alembic==1.20.1
 psycopg[binary]==3.3.6
 httpx==0.28.1
-pytest==9.1.1
 beautifulsoup4==4.15.0
+# Render Workflows SDK: only used when Watchman runs as a Render Workflow (app/watchman/workflow.py)
 render==1.4.0

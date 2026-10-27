@@ -1,12 +1,16 @@
 """Runtime settings, read from environment variables (prefix CC_)."""
 import os
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# backend/: .env and relative SQLite paths are resolved here, whichever folder a command is run from.
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="CC_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="CC_", env_file=BACKEND_DIR / ".env", extra="ignore")
 
     env: str = "development"
     database_url: str = "sqlite:///./consent_court.db"

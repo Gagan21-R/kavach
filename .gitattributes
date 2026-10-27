@@ -1,0 +1,7 @@
+# Shell scripts must keep LF to run on macOS / Linux; PowerShell scripts keep CRLF for Windows PowerShell 5.1.
+* text=auto
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.pptx binary
+*.png binary
+*.db binary
