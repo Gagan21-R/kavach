@@ -103,6 +103,8 @@ Set `CC_FETCH_CONTACT` (an email or URL) so site owners can reach whoever runs t
 3. Open that Kavach address in the same browser while signed in (reload once after signing in). The extension connects itself; there is no key to paste. Local and live are separate accounts.
 4. Open any privacy policy or terms page, for example https://www.spotify.com/us/legal/privacy-policy/. A panel shows one review of the whole site (its privacy policy and terms through all six agents) with **Track this website**.
 
+**A copy that already points to the live demo** (no Settings step): `python scripts/package_extension.py` writes `release/Kavach-extension.zip`. Unzip it and load the `kavach-extension` folder in step 1; its `README.txt` has the same steps. Pass another address to package it for your own server.
+
 ### Automatic checks and the monitoring inbox
 
 - While the server runs, Watchman re-checks every tracked policy every `CC_WATCH_INTERVAL_MINUTES` (default 360). It first asks the site whether the page changed (ETag / Last-Modified, a 304 costs no download), then downloads and compares. **Check all now** in Watchman runs the same check on demand.
