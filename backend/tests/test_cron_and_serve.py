@@ -37,3 +37,50 @@ def test_production_app_serves_api_under_api_prefix_with_security_headers(app, m
     assert root.get("/api/auth/me").status_code == 401
     assert root.get("/../backend/app/config.py").status_code in (200, 404)
     assert "CC_" not in root.get("/../backend/app/config.py").text
+
+
+def test_render_workflow_checks_every_policy_in_parallel(make_actor, Session, monkeypatch):
+    import asyncio
+    import functools
+
+    from app.watchman import workflow
+    from app.watchman.service import check_source
+
+    class FakeRenderRuntime:  # stands in for Render: runs each subtask's function, failing one policy every time
+        def __init__(self, bad):
+            self.bad, self.calls = bad, []
+
+        async def run(self, task, *args):
+            self.calls.append((task.name, args))
+            if args and args[0] == self.bad:
+                raise RuntimeError("retries exhausted")
+            return task.func(self, *args)
+
+    monkeypatch.setattr(cron, "SessionLocal", Session)
+    monkeypatch.setattr(cron, "check_source", functools.partial(
+        check_source, fetcher=lambda url: FetchResult(True, text=fx.MAPSCO_BETRAYAL, final_url=url)))
+    a, b = make_actor(), make_actor()
+    ids = [a.client.post("/policies", json={"name": f"Site{i}", "url": f"https://s{i}.example/privacy",
+                                            "text": fx.MAPSCO["text"]}).json()["id"] for i in range(3)]
+    b.client.post("/policies", json={"name": "Frozen", "url": "https://frozen.example/privacy", "text": fx.MAPSCO["text"]})
+    b.client.post("/emergency-stop/activate", json={"reason": "drill"})
+    rt = FakeRenderRuntime(bad=ids[0])
+    result = asyncio.run(workflow.check_all.func(rt))
+    assert result == {"policies": 4, "checked": 2, "changed": 2, "unknown": 0, "skipped_frozen": 1, "errors": 1}
+    assert len(rt.calls) == 4 and {name for name, _ in rt.calls} == {"check_policy"}
+
+
+def test_cron_starts_the_workflow_when_configured_and_falls_back_when_it_cannot(monkeypatch):
+    monkeypatch.setattr(cron, "run", lambda: {"checked": 0})
+    monkeypatch.delenv("CC_WATCHMAN_WORKFLOW", raising=False)
+    assert cron.main() == {"checked": 0}  # not configured: checks here
+    monkeypatch.setenv("CC_WATCHMAN_WORKFLOW", "kavach-watchman-flow/check_all")
+    monkeypatch.setenv("RENDER_API_KEY", "test-key")
+    monkeypatch.setattr(cron, "start_workflow", lambda slug: "trn-123")
+    assert cron.main() == {"workflow": "kavach-watchman-flow/check_all", "task_run": "trn-123"}
+
+    def down(slug):
+        raise ConnectionError("render api unreachable")
+
+    monkeypatch.setattr(cron, "start_workflow", down)
+    assert cron.main() == {"checked": 0}  # Render unreachable: still checks

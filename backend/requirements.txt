@@ -9,3 +9,4 @@ psycopg[binary]==3.3.6
 httpx==0.28.1
 pytest==9.1.1
 beautifulsoup4==4.15.0
+render==1.4.0

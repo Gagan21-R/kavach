@@ -71,7 +71,7 @@ cd backend
 .venv/Scripts/python.exe -m pytest
 ```
 
-183 tests: engine, contracts, auth, tenant isolation, tokens, gateway bypass and fail-closed behaviour, court pipeline, auditor, Watchman, data flow, Emergency Stop, chatbot, drafts, Red Team reproducibility, migrations, cron, production app, policy acquisition and fallbacks, discovery, preferences, combined site reviews, automatic re-checks with ETag / Last-Modified, the extension API and automatic connection, the monitoring inbox, rule groups, the improved Emergency Stop and the scoring calibration. No test touches the network.
+185 tests: engine, contracts, auth, tenant isolation, tokens, gateway bypass and fail-closed behaviour, court pipeline, auditor, Watchman, data flow, Emergency Stop, chatbot, drafts, Red Team reproducibility, migrations, cron, production app, policy acquisition and fallbacks, discovery, preferences, combined site reviews, automatic re-checks with ETag / Last-Modified, the extension API and automatic connection, the monitoring inbox, rule groups, the improved Emergency Stop and the scoring calibration. No test touches the network.
 
 ## Deploy on Render
 
@@ -81,11 +81,14 @@ cd backend
 |---|---|---|
 | `kavach` web service | Free | Builds the dashboard, runs the migrations, serves the API under `/api` and the dashboard on one origin |
 | `kavach-db` PostgreSQL | Free | The database (Render deletes free databases after 30 days; upgrade to Basic to keep it) |
-| `kavach-watchman` cron job | Starter (about $1 a month) | Re-checks every tracked policy every 6 hours, since free web services sleep when idle |
+| `kavach-watchman` cron job | Starter (about $1 a month) | Every 6 hours, starts the Watchman workflow (free web services sleep when idle, so they can't) |
+| `kavach-watchman-flow` Render Workflow | Pay per second of task time | `check_all` fans out one `check_policy` task per policy, 20 in parallel, each retried twice on failure |
 
 1. Push this repository to GitHub.
-2. In Render: **New > Blueprint**, pick the repository and click **Apply**.
+2. In Render: **New > Blueprint**, pick the repository. When asked for `RENDER_API_KEY`, paste a key from **Account Settings > API Keys** (the cron job uses it to start the workflow). Click **Apply**.
 3. Open the `kavach` service's URL once the deploy is live and create an account.
+
+Watchman scales with the number of tracked policies: each policy is checked on its own compute, so 10,000 policies take about as long as 20. Without the API key, or if Render's API can't be reached, the cron job checks every policy itself, one by one, so checks never stop. Locally the same code runs in-process (`app.watchman.scheduler`).
 
 The free web service sleeps after 15 minutes without visits; the first visit after that takes about a minute. The migrations and the full app (sign-up, demo data, Red Team, postmortems) have been checked against PostgreSQL 17 with production settings.
 
